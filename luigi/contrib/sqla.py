@@ -163,14 +163,14 @@ class SQLAlchemyTarget(luigi.Target):
     _engine_dict = {}  # dict of sqlalchemy engine instances
     Connection = collections.namedtuple("Connection", "engine pid")
 
-    def __init__(self, connection_string, target_table, update_id, echo=False, connect_args=None, fast_executemany=True):
+    def __init__(self, connection_string, target_object, update_id, echo=False, connect_args=None, fast_executemany=True):
         """
         Constructor for the SQLAlchemyTarget.
 
         :param connection_string: SQLAlchemy connection string
         :type connection_string: str
-        :param target_table: The table name for the data
-        :type target_table: str
+        :param target_object: The table name for the data
+        :type target_object: str
         :param update_id: An identifier for this data set
         :type update_id: str
         :param echo: Flag to setup SQLAlchemy logging
@@ -182,7 +182,7 @@ class SQLAlchemyTarget(luigi.Target):
         if connect_args is None:
             connect_args = {}
 
-        self.target_table = target_table
+        self.target_object = target_object
         self.update_id = update_id
         self.connection_string = connection_string
         self.echo = echo
@@ -223,12 +223,12 @@ class SQLAlchemyTarget(luigi.Target):
         id_exists = self.exists()
         with self.engine.begin() as conn:
             if not id_exists:
-                ins = table.insert().values(update_id=self.update_id, target_table=self.target_table,
+                ins = table.insert().values(update_id=self.update_id, target_object=self.target_object,
                                             inserted=datetime.datetime.now())
             else:
                 ins = table.update().where(sqlalchemy.and_(table.c.update_id == self.update_id,
-                                                           table.c.target_table == self.target_table)).\
-                    values(update_id=self.update_id, target_table=self.target_table,
+                                                           table.c.target_object == self.target_object)).\
+                    values(update_id=self.update_id, target_object=self.target_object,
                            inserted=datetime.datetime.now())
             conn.execute(ins)
         assert self.exists()
@@ -240,7 +240,7 @@ class SQLAlchemyTarget(luigi.Target):
         with self.engine.begin() as conn:
             table = self.marker_table_bound
             s = sqlalchemy.select([table]).where(sqlalchemy.and_(table.c.update_id == self.update_id,
-                                                                 table.c.target_table == self.target_table)).limit(1)
+                                                                 table.c.target_object == self.target_object)).limit(1)
             row = conn.execute(s).fetchone()
         return row is not None
 
@@ -261,7 +261,7 @@ class SQLAlchemyTarget(luigi.Target):
                 self.marker_table_bound = sqlalchemy.Table(
                     self.marker_table, metadata,
                     sqlalchemy.Column("update_id", sqlalchemy.String(128), primary_key=True),
-                    sqlalchemy.Column("target_table", sqlalchemy.String(128)),
+                    sqlalchemy.Column("target_object", sqlalchemy.String(128)),
                     sqlalchemy.Column("inserted", sqlalchemy.DateTime, default=datetime.datetime.now()))
                 metadata.create_all(engine)
             else:
@@ -372,7 +372,7 @@ class CopyToTable(luigi.Task):
     def output(self):
         return SQLAlchemyTarget(
             connection_string=self.connection_string,
-            target_table=self.table,
+            target_object=self.table,
             update_id=self.update_id(),
             connect_args=self.connect_args,
             echo=self.echo,
@@ -425,3 +425,39 @@ class CopyToTable(luigi.Task):
         bound_cols = dict((c, sqlalchemy.bindparam("_" + c.key)) for c in table_bound.columns)
         ins = table_bound.insert().values(bound_cols)
         conn.execute(ins, ins_rows)
+
+
+class ExecProcedure(CopyToTable):
+    """
+    An abstract task for executing SQL stored procedures.
+
+    Usage:
+
+    * subclass and override required `exec_command`
+    """
+
+    _logger = logging.getLogger('luigi-interface')
+    echo = False
+    connect_args = {}
+    exec_command = ""
+
+    def run(self):
+        self._logger.info("Running sql command `%s` for update id [%s]" % (self.exec_command, self.update_id()))
+        output = self.output()
+        engine = output.engine
+        with engine.begin() as conn:
+            conn.execute(self.exec_command)
+        output.touch()
+        self._logger.info("Finished execution of command `%s`" % self.exec_command)
+
+    def create_table(self, engine):
+        raise NotImplementedError("create_table() is irrelevant for this class")
+
+    def rows(self):
+        raise NotImplementedError("rows() is irrelevant for this class")
+
+    def copy(self, conn, ins_rows, table_bound):
+        raise NotImplementedError("copy() is irrelevant for this class")
+
+
+ep = ExecProcedure()
