@@ -27,7 +27,19 @@ class SQLATask(sqla.CopyToTable):
             return super().complete()
 
 
+class ProcTest(sqla.ExecProcedure):
+    force = luigi.BoolParameter(default=False)
+    connection_string = "mssql+pyodbc://?odbc_connect=DRIVER={ODBC+Driver+17+for+SQL+Server};SERVER=MSTM1BDB33\DB01;DATABASE=TESTING_DB;Trusted_Connection=yes"  # in memory SQLite database
+    exec_command = "EXEC [SP_INSERT] @val='luigi_test'"
+
+    def complete(self):
+        if self.force:
+            return False
+        else:
+            return super().complete()
+
 if __name__ == '__main__':
-    task = SQLATask(force=True, n=1)
+    #task = SQLATask(force=True, n=1)
+    task = ProcTest(force=False)
     luigi.build([task], local_scheduler=True)
 

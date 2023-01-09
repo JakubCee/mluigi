@@ -441,6 +441,10 @@ class ExecProcedure(CopyToTable):
     connect_args = {}
     exec_command = ""
 
+    @property
+    def table(self):
+        return None
+
     def run(self):
         self._logger.info("Running sql command `%s` for update id [%s]" % (self.exec_command, self.update_id()))
         output = self.output()
@@ -460,4 +464,3 @@ class ExecProcedure(CopyToTable):
         raise NotImplementedError("copy() is irrelevant for this class")
 
 
-ep = ExecProcedure()
