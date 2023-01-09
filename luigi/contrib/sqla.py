@@ -165,7 +165,7 @@ class SQLAlchemyTarget(luigi.Target):
     _engine_dict = {}  # dict of sqlalchemy engine instances
     Connection = collections.namedtuple("Connection", "engine pid")
 
-    def __init__(self, connection_string, target_table, update_id, echo=False, connect_args=None):
+    def __init__(self, connection_string, target_table, update_id, echo=False, connect_args=None, fast_executemany=True):
         """
         Constructor for the SQLAlchemyTarget.
 
@@ -190,6 +190,8 @@ class SQLAlchemyTarget(luigi.Target):
         self.echo = echo
         self.connect_args = connect_args
         self.marker_table_bound = None
+        self.fast_executemany = fast_executemany
+
 
     @property
     def engine(self):
@@ -205,8 +207,9 @@ class SQLAlchemyTarget(luigi.Target):
             # create and reset connection
             engine = sqlalchemy.create_engine(
                 self.connection_string,
+                echo=self.echo,
                 connect_args=self.connect_args,
-                echo=self.echo
+                fast_executemany=self.fast_executemany
             )
             SQLAlchemyTarget._engine_dict[self.connection_string] = self.Connection(engine, pid)
         return SQLAlchemyTarget._engine_dict[self.connection_string].engine
@@ -284,6 +287,7 @@ class CopyToTable(luigi.Task):
     _logger = logging.getLogger('luigi-interface')
 
     echo = False
+    fast_executemany=True
     connect_args = {}
 
     @property
@@ -372,7 +376,9 @@ class CopyToTable(luigi.Task):
             target_table=self.table,
             update_id=self.update_id(),
             connect_args=self.connect_args,
-            echo=self.echo)
+            echo=self.echo,
+            fast_executemany=self.fast_executemany
+        )
 
     def rows(self):
         """
