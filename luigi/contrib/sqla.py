@@ -295,7 +295,7 @@ class CopyToTable(luigi.Task):
 
     @property
     @abc.abstractmethod
-    def table(self):
+    def sql_object(self):
         return None
 
     # specify the columns that define the schema. The format for the columns is a list
@@ -326,7 +326,7 @@ class CopyToTable(luigi.Task):
         """
         Override to provide code for creating the target table.
 
-        By default it will be created using types specified in columns.
+        By default, it will be created using types specified in columns.
         If the table exists, then it binds to the existing table.
 
         If overridden, use the provided connection object for setting up the table in order to
@@ -341,7 +341,7 @@ class CopyToTable(luigi.Task):
         needs_setup = (len(self.columns) == 0) or (False in [len(c) == 2 for c in self.columns]) if not self.reflect else False
         if needs_setup:
             # only names of columns specified, no types
-            raise NotImplementedError("create_table() not implemented for %r and columns types not specified" % self.table)
+            raise NotImplementedError("create_table() not implemented for %r and columns types not specified" % self.sql_object)
         else:
             # if columns is specified as (name, type) tuples
             with engine.begin() as con:
@@ -352,16 +352,16 @@ class CopyToTable(luigi.Task):
                     metadata = sqlalchemy.MetaData()
 
                 try:
-                    if not con.dialect.has_table(con, self.table, self.schema or None):
+                    if not con.dialect.has_table(con, self.sql_object, self.schema or None):
                         sqla_columns = construct_sqla_columns(self.columns)
-                        self.table_bound = sqlalchemy.Table(self.table, metadata, *sqla_columns)
+                        self.sql_object_bound = sqlalchemy.Table(self.sql_object, metadata, *sqla_columns)
                         metadata.create_all(engine)
                     else:
-                        full_table = '.'.join([self.schema, self.table]) if self.schema else self.table
-                        metadata.reflect(only=[self.table], bind=engine)
-                        self.table_bound = metadata.tables[full_table]
+                        full_table = '.'.join([self.schema, self.sql_object]) if self.schema else self.sql_object
+                        metadata.reflect(only=[self.sql_object], bind=engine)
+                        self.sql_object_bound = metadata.tables[full_table]
                 except Exception as e:
-                    self._logger.exception(self.table + str(e))
+                    self._logger.exception(self.sql_object + str(e))
 
     def update_id(self):
         """
@@ -372,7 +372,7 @@ class CopyToTable(luigi.Task):
     def output(self):
         return SQLAlchemyTarget(
             connection_string=self.connection_string,
-            target_object=self.table,
+            target_object=self.sql_object,
             update_id=self.update_id(),
             connect_args=self.connect_args,
             echo=self.echo,
@@ -390,22 +390,22 @@ class CopyToTable(luigi.Task):
                 yield line.strip("\n").split(self.column_separator)
 
     def run(self):
-        self._logger.info("Running task copy to table for update id %s for table %s" % (self.update_id(), self.table))
+        self._logger.info("Running task copy to table for update id %s for table %s" % (self.update_id(), self.sql_object))
         output = self.output()
         engine = output.engine
         self.create_table(engine)
         if self.truncate:
             with engine.begin() as con:
-                con.execute("TRUNCATE TABLE [%s];" % self.table)
-                self._logger.info("Table [%s] is truncated" % self.table)
+                con.execute("TRUNCATE TABLE [%s];" % self.sql_object)
+                self._logger.info("Table [%s] is truncated" % self.sql_object)
 
         with engine.begin() as conn:
             rows = iter(self.rows())
-            ins_rows = [dict(zip(("_" + c.key for c in self.table_bound.c), row))
+            ins_rows = [dict(zip(("_" + c.key for c in self.sql_object_bound.c), row))
                         for row in itertools.islice(rows, self.chunk_size)]
             while ins_rows:
-                self.copy(conn, ins_rows, self.table_bound)
-                ins_rows = [dict(zip(("_" + c.key for c in self.table_bound.c), row))
+                self.copy(conn, ins_rows, self.sql_object_bound)
+                ins_rows = [dict(zip(("_" + c.key for c in self.sql_object_bound.c), row))
                             for row in itertools.islice(rows, self.chunk_size)]
                 self._logger.info("Finished inserting %d rows into SQLAlchemy target" % len(ins_rows))
         output.touch()
@@ -439,20 +439,22 @@ class ExecProcedure(CopyToTable):
     _logger = logging.getLogger('luigi-interface')
     echo = False
     connect_args = {}
-    exec_command = ""
+
 
     @property
-    def table(self):
+    @abc.abstractmethod
+    def sql_params(self):
         return None
 
     def run(self):
-        self._logger.info("Running sql command `%s` for update id [%s]" % (self.exec_command, self.update_id()))
+        stmt = "EXEC [%s] %s" % (self.sql_object, self.sql_params)
+        self._logger.info("Running sql command `%s` for update id [%s]" % (stmt, self.update_id()))
         output = self.output()
         engine = output.engine
         with engine.begin() as conn:
-            conn.execute(self.exec_command)
+            conn.execute(stmt)
         output.touch()
-        self._logger.info("Finished execution of command `%s`" % self.exec_command)
+        self._logger.info("Finished execution of command `%s`" % stmt)
 
     def create_table(self, engine):
         raise NotImplementedError("create_table() is irrelevant for this class")
