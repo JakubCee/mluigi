@@ -14,6 +14,7 @@ class SQLATask(sqla.CopyToTable):
     table = "luigi_test"  # name of the table to store data
     fast_executemany = True
     echo = False
+    truncate = False
 
     def rows(self):
         for i in range(self.n):
@@ -27,6 +28,6 @@ class SQLATask(sqla.CopyToTable):
 
 
 if __name__ == '__main__':
-    task = SQLATask(force=True, n=100000)
+    task = SQLATask(force=True, n=1)
     luigi.build([task], local_scheduler=True)
 

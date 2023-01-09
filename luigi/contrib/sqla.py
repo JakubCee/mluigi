@@ -322,6 +322,7 @@ class CopyToTable(luigi.Task):
     column_separator = "\t"  # how columns are separated in the file copied into postgres
     chunk_size = 5000   # default chunk size for insert
     reflect = False  # Set this to true only if the table has already been created by alternate means
+    truncate = False  # Set to True if table should be truncated before insert
 
     def create_table(self, engine):
         """
@@ -395,6 +396,11 @@ class CopyToTable(luigi.Task):
         output = self.output()
         engine = output.engine
         self.create_table(engine)
+        if self.truncate:
+            with engine.begin() as con:
+                con.execute("TRUNCATE TABLE [%s];" % self.table)
+                self._logger.info("Table [%s] is truncated" % self.table)
+
         with engine.begin() as conn:
             rows = iter(self.rows())
             ins_rows = [dict(zip(("_" + c.key for c in self.table_bound.c), row))
