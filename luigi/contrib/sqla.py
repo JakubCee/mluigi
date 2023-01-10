@@ -286,6 +286,7 @@ class CopyToTable(luigi.Task):
 
     echo = False
     fast_executemany=True
+    fast_executemany = True
     connect_args = {}
 
     @property
@@ -457,12 +458,12 @@ class ExecProcedure(CopyToTable):
         self._logger.info("Finished execution of command `%s`" % stmt)
 
     def create_table(self, engine):
-        raise NotImplementedError("create_table() is irrelevant for this class")
+        raise NotImplementedError("create_table() is irrelevant for this task")
 
     def rows(self):
-        raise NotImplementedError("rows() is irrelevant for this class")
+        raise NotImplementedError("rows() is irrelevant for this task")
 
     def copy(self, conn, ins_rows, table_bound):
-        raise NotImplementedError("copy() is irrelevant for this class")
+        raise NotImplementedError("copy() is irrelevant for this task")
 
 
