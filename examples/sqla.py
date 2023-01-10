@@ -1,13 +1,19 @@
+import logging
+
 import luigi
 from luigi.contrib import sqla
 from datetime import datetime
+from luigi.mock import MockTarget
+
+class MockAlwaysExists(MockTarget):
+    def exists(self):
+        return True
 
 
 class SQLATask(sqla.CopyToTable):
     # If database table is already created, then the schema can be loaded
     # by setting the reflect flag to True
 
-    force = luigi.BoolParameter(default=False)
     n = luigi.IntParameter(default=10)
     reflect = True
     connection_string = "mssql+pyodbc://?odbc_connect=DRIVER={ODBC+Driver+17+for+SQL+Server};SERVER=MSTM1BDB33\DB01;DATABASE=TESTING_DB;Trusted_Connection=yes"  # in memory SQLite database
@@ -20,27 +26,46 @@ class SQLATask(sqla.CopyToTable):
         for i in range(self.n):
             yield (i, f"Name_{i}", 5.33 * i, datetime.now() )
 
-    def complete(self):
-        if self.force:
-            return False
-        else:
-            return super().complete()
-
 
 class ProcTest(sqla.ExecProcedure):
-    force = luigi.BoolParameter(default=False)
     connection_string = "mssql+pyodbc://?odbc_connect=DRIVER={ODBC+Driver+17+for+SQL+Server};SERVER=MSTM1BDB33\DB01;DATABASE=TESTING_DB;Trusted_Connection=yes"  # in memory SQLite database
     sql_params = "@val = 'luigi_teste'"
     sql_object = "SP_INSERT"
+    expire_at = datetime(2023, 1, 10, 1)
 
-    def complete(self):
-        if self.force:
-            return False
-        else:
-            return super().complete()
+
+class MiddleTask(luigi.Task):
+
+    def requires(self):
+        return ProcTest()
+
+    def output(self):
+        return luigi.mock.MockTarget(f"{self.__class__.__name__}.txt")
+
+    def run(self):
+        print("Do some stuff in run() of MiddleTask")
+        self.output().open('w').close()
+
+
+class LastTask(luigi.Task):
+    def requires(self):
+        return MiddleTask()
+
+    def output(self):
+        return luigi.mock.MockTarget(f"{self.__class__.__name__}.txt")
+
+    def run(self):
+        print("Do stuff in LastTask")
+        self.output().open('w').close()
+
+
 
 if __name__ == '__main__':
     #task = SQLATask(force=True, n=1)
-    task = ProcTest(force=True)
-    luigi.build([task], local_scheduler=True)
+    #t = ProcTest(force=True)
+
+    task = ProcTest()
+    print(task.output().expire_at)
+    print(task.output().exists())
+    luigi.build([task], local_scheduler=True, detailed_summary=True, log_level='INFO')
 

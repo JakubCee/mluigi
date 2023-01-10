@@ -148,6 +148,7 @@ import logging
 import luigi
 import os
 import sqlalchemy
+from datetime import datetime
 
 
 class SQLAlchemyTarget(luigi.Target):
@@ -163,7 +164,7 @@ class SQLAlchemyTarget(luigi.Target):
     _engine_dict = {}  # dict of sqlalchemy engine instances
     Connection = collections.namedtuple("Connection", "engine pid")
 
-    def __init__(self, connection_string, target_object, update_id, echo=False, connect_args=None, fast_executemany=True):
+    def __init__(self, connection_string, target_object, update_id, expire_at=None, echo=False, connect_args=None, fast_executemany=True):
         """
         Constructor for the SQLAlchemyTarget.
 
@@ -184,6 +185,7 @@ class SQLAlchemyTarget(luigi.Target):
 
         self.target_object = target_object
         self.update_id = update_id
+        self.expire_at = expire_at
         self.connection_string = connection_string
         self.echo = echo
         self.connect_args = connect_args
@@ -224,12 +226,12 @@ class SQLAlchemyTarget(luigi.Target):
         with self.engine.begin() as conn:
             if not id_exists:
                 ins = table.insert().values(update_id=self.update_id, target_object=self.target_object,
-                                            inserted=datetime.datetime.now())
+                                            inserted=datetime.now())
             else:
                 ins = table.update().where(sqlalchemy.and_(table.c.update_id == self.update_id,
                                                            table.c.target_object == self.target_object)).\
                     values(update_id=self.update_id, target_object=self.target_object,
-                           inserted=datetime.datetime.now())
+                           inserted=datetime.now())
             conn.execute(ins)
         assert self.exists()
 
@@ -285,8 +287,8 @@ class CopyToTable(luigi.Task):
     _logger = logging.getLogger('luigi-interface')
 
     echo = False
-    fast_executemany=True
     fast_executemany = True
+    expire_at = None
     connect_args = {}
 
     @property
@@ -375,6 +377,7 @@ class CopyToTable(luigi.Task):
             connection_string=self.connection_string,
             target_object=self.sql_object,
             update_id=self.update_id(),
+            expire_at=self.expire_at,
             connect_args=self.connect_args,
             echo=self.echo,
             fast_executemany=self.fast_executemany
@@ -437,7 +440,7 @@ class ExecProcedure(CopyToTable):
     * subclass and override required `exec_command`
     """
 
-    _logger = logging.getLogger('luigi-interface')
+    #_logger = logging.getLogger('luigi-interface')
     echo = False
     connect_args = {}
 
