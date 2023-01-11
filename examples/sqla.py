@@ -29,9 +29,9 @@ class SQLATask(sqla.CopyToTable):
 
 class ProcTest(sqla.ExecProcedure):
     connection_string = "mssql+pyodbc://?odbc_connect=DRIVER={ODBC+Driver+17+for+SQL+Server};SERVER=MSTM1BDB33\DB01;DATABASE=TESTING_DB;Trusted_Connection=yes"  # in memory SQLite database
-    sql_params = "@val = 'luigi_teste'"
+    sql_params = f"@val = '{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}'"
     sql_object = "SP_INSERT"
-    expire_at = datetime.now() - timedelta(hours=4)
+    expire_at = luigi.DateSecondParameter()
 
 
 class MiddleTask(luigi.Task):
@@ -43,7 +43,6 @@ class MiddleTask(luigi.Task):
         return luigi.mock.MockTarget(f"{self.__class__.__name__}.txt")
 
     def run(self):
-        print("Do some stuff in run() of MiddleTask")
         self.output().open('w').close()
 
 
@@ -55,7 +54,6 @@ class LastTask(luigi.Task):
         return luigi.mock.MockTarget(f"{self.__class__.__name__}.txt")
 
     def run(self):
-        print("Do stuff in LastTask")
         self.output().open('w').close()
 
 
@@ -64,8 +62,6 @@ if __name__ == '__main__':
     #task = SQLATask(force=True, n=1)
     #t = ProcTest(force=True)
 
-    task = ProcTest()
-    print(task.output().expire_at)
-    print(task.output().exists())
+    task = ProcTest(expire_at=datetime.now() - timedelta(seconds=5))
     luigi.build([task], local_scheduler=True, detailed_summary=True, log_level='INFO')
 

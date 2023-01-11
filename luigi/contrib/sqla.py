@@ -185,7 +185,7 @@ class SQLAlchemyTarget(luigi.Target):
 
         self.target_object = target_object
         self.update_id = update_id
-        self.expire_at = min(expire_at, datetime.now())
+        self.expire_at = min(expire_at, datetime.now()) if expire_at is not None else None
         self.connection_string = connection_string
         self.echo = echo
         self.connect_args = connect_args
