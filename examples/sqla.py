@@ -2,7 +2,7 @@ import logging
 
 import luigi
 from luigi.contrib import sqla
-from datetime import datetime
+from datetime import datetime, timedelta
 from luigi.mock import MockTarget
 
 class MockAlwaysExists(MockTarget):
@@ -31,7 +31,7 @@ class ProcTest(sqla.ExecProcedure):
     connection_string = "mssql+pyodbc://?odbc_connect=DRIVER={ODBC+Driver+17+for+SQL+Server};SERVER=MSTM1BDB33\DB01;DATABASE=TESTING_DB;Trusted_Connection=yes"  # in memory SQLite database
     sql_params = "@val = 'luigi_teste'"
     sql_object = "SP_INSERT"
-    expire_at = datetime(2023, 1, 10, 1)
+    expire_at = datetime.now() - timedelta(hours=4)
 
 
 class MiddleTask(luigi.Task):

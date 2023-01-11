@@ -185,7 +185,7 @@ class SQLAlchemyTarget(luigi.Target):
 
         self.target_object = target_object
         self.update_id = update_id
-        self.expire_at = expire_at
+        self.expire_at = min(expire_at, datetime.now())
         self.connection_string = connection_string
         self.echo = echo
         self.connect_args = connect_args
@@ -222,11 +222,13 @@ class SQLAlchemyTarget(luigi.Target):
             self.create_marker_table()
 
         table = self.marker_table_bound
-        id_exists = self.exists()
+        # run again to update ``self._exists_status``
+        self.exists()
         with self.engine.begin() as conn:
-            if not id_exists:
+            if self._exists_status == "NOT_EXISTS":
                 ins = table.insert().values(update_id=self.update_id, target_object=self.target_object,
                                             inserted=datetime.now())
+
             else:
                 ins = table.update().where(sqlalchemy.and_(table.c.update_id == self.update_id,
                                                            table.c.target_object == self.target_object)).\
@@ -235,7 +237,11 @@ class SQLAlchemyTarget(luigi.Target):
             conn.execute(ins)
         assert self.exists()
 
+    # attribute controls if task id exists in db and assess its expiration, see :meth:`self.exists()`
+    _exists_status = "NOT_EXISTS"
+
     def exists(self):
+        self._exists_status = "NOT_EXISTS"
         row = None
         if self.marker_table_bound is None:
             self.create_marker_table()
@@ -244,7 +250,14 @@ class SQLAlchemyTarget(luigi.Target):
             s = sqlalchemy.select([table]).where(sqlalchemy.and_(table.c.update_id == self.update_id,
                                                                  table.c.target_object == self.target_object)).limit(1)
             row = conn.execute(s).fetchone()
-        return row is not None
+
+        if row is not None:
+            self._exists_status = "EXISTS"
+            if self.expire_at is not None:
+                # if row is returned, task exists in db, check if expiration date is greater than insert time to set
+                # it as expired and trigger a rerun
+                self._exists_status = "EXPIRED" if self.expire_at > row.inserted else "EXISTS"
+        return self._exists_status == "EXISTS"
 
     def create_marker_table(self):
         """
