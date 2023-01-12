@@ -29,7 +29,7 @@ from luigi import target
 from luigi.target import Target
 
 from luigi import local_target
-from luigi.local_target import LocalTarget
+from luigi.local_target import LocalTarget, LocalExcelTarget
 
 from luigi import rpc
 from luigi.rpc import RemoteScheduler, RPCError
