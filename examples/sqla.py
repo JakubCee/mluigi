@@ -35,9 +35,10 @@ class ProcTest(sqla.ExecProcedure):
 
 
 class MiddleTask(luigi.Task):
+    expire_at = luigi.DateSecondParameter()
 
     def requires(self):
-        return ProcTest()
+        return ProcTest(expire_at=self.expire_at)
 
     def output(self):
         return luigi.mock.MockTarget(f"{self.__class__.__name__}.txt")
@@ -47,8 +48,9 @@ class MiddleTask(luigi.Task):
 
 
 class LastTask(luigi.Task):
+    expire_at = luigi.DateSecondParameter()
     def requires(self):
-        return MiddleTask()
+        return MiddleTask(expire_at=self.expire_at)
 
     def output(self):
         return luigi.mock.MockTarget(f"{self.__class__.__name__}.txt")
@@ -58,10 +60,10 @@ class LastTask(luigi.Task):
 
 
 
-if __name__ == '__main__':
-    #task = SQLATask(force=True, n=1)
-    #t = ProcTest(force=True)
-
-    task = ProcTest(expire_at=datetime.now() - timedelta(seconds=5))
-    luigi.build([task], local_scheduler=True, detailed_summary=True, log_level='INFO')
-
+# if __name__ == '__main__':
+#     #task = SQLATask(force=True, n=1)
+#     #t = ProcTest(force=True)
+#
+#     task = ProcTest(expire_at=datetime.now() - timedelta(seconds=5))
+#     run_results = luigi.build([task], local_scheduler=True, detailed_summary=True, log_level='INFO')
+#     print(run_results.summary_text)
