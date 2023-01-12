@@ -27,7 +27,7 @@ import io
 import warnings
 import errno
 
-from luigi.format import FileWrapper, get_default_format
+from luigi.format import FileWrapper, Nop, get_default_format
 from luigi.target import FileAlreadyExists, MissingParentDirectory, NotADirectory, FileSystem, FileSystemTarget, AtomicLocalFile
 
 
@@ -188,3 +188,15 @@ class LocalTarget(FileSystemTarget):
     def __del__(self):
         if hasattr(self, "is_tmp") and self.is_tmp and self.exists():
             self.remove()
+
+
+class LocalExcelTarget(LocalTarget):
+    def __init__(self, path=None, is_tmp=False, extension='xlsx'):
+        if not path:
+            if not is_tmp:
+                raise Exception('path or is_tmp must be set')
+            path = os.path.join(tempfile.gettempdir(), 'luigi-tmp-%09d.%s' % (random.randint(0, 999999999), extension))
+        self.format = format
+        self.is_tmp = is_tmp
+        self.path = str(path)
+        
