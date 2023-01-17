@@ -1,17 +1,31 @@
 import mimetypes
-import pathlib
+import os
 import smtplib
-import socket
 from copy import copy
 from email.message import EmailMessage
 from email.utils import formatdate
 from pathlib import Path
-from smtplib import SMTPAuthenticationError
-from smtplib import SMTPSenderRefused
-from smtplib import SMTPServerDisconnected
+
 
 import luigi
-from luigi import LocalTarget, Task
+from luigi import Task
+from luigi.task import Config
+from luigi.parameter import Parameter, IntParameter, BoolParameter
+
+
+class smtp_contrib(Config):
+    host = Parameter(default=os.getenv("SMTP_HOST",""), description="Host for SMTP mail server")
+    port = IntParameter(default=os.getenv("SMTP_PORT", 25), description="Port for SMTP mail server")
+    local_hostname = Parameter(default="localhost", description="Local host name for SMTP server")
+    from_ = Parameter(default="luigi@noreply.com", description="Sender email address")
+    html = BoolParameter(default=True, description="Use html as message format")
+    tls = BoolParameter(default=False, description="Use TLS")
+    ssl = BoolParameter(default=False, description="Use SSL")
+    username = Parameter(default=os.getenv("SMTP_USERNAME",""), description="Username login for SMTP server")
+    password = Parameter(default=os.getenv("SMTP_PASSWORD",""), description="Password for SMTP server")
+
+
+
 
 host = "mail.medtronic.com"
 port = 25
@@ -34,21 +48,24 @@ def list_to_commas(list_of_args):
 
 
 class SmtpMail(Task):
-    host = "mail.medtronic.com"
-    port = 25
-    to = 'jakub.cehak@medtronic.com'
-    subject = "test luigi"
+    _cfg = smtp_contrib()
+
+    host = _cfg.host
+    port = _cfg.port
+    from_=_cfg.from_
+    html=_cfg.html
     message = message
-    extra_attachments=None
-    html=True
-    from_="no-reply@luigi.com"
-    cc=None
-    bcc=None
-    local_hostname="localhost"
-    tls=False
-    ssl=False
-    username=None
-    password=None
+    local_hostname = _cfg.local_hostname
+    tls = _cfg.tls
+    ssl = _cfg.ssl
+    username = _cfg.username
+    password = _cfg.password
+
+    subject = "test luigi"
+    to = 'jakub.cehak@medtronic.com'
+    cc = None
+    bcc = None
+    extra_attachments = None
 
     def _connect_to_mailserver(self):
         self.smtp_server = smtplib.SMTP_SSL if self.ssl else smtplib.SMTP
@@ -138,35 +155,5 @@ class SmtpMail(Task):
             f.write(str(mail_no_attachments))
 
 
-if __name__ == "__main__":
-    from pathlib import Path
-    # attachs = [*Path("C:/apps/KRONOS_LOAD_SQL/EXCEL/QC_CONTRACTORS").rglob('*')]
-    # mail = SmtpMail(host=host, port=port,to=to, subject=subject, message=message,extra_attachments=attachs[0], bcc=bcc, cc=cc)
-    # mail.run()
-    # # m = mail._build_email()
-    # # m = mail._add_attachments(attachs)
-    # # for i in m.items():
-    # #     print(i)
-    #
 
-    from luigi.format import Nop
-    class ExtraData(luigi.ExternalTask):
-
-        attachment = luigi.Parameter()
-        def output(self):
-            return luigi.LocalTarget(path=self.attachment, format=Nop)
-
-    class T(SmtpMail):
-        extra_attachments = ["C:/apps/KRONOS_LOAD_SQL/EXCEL/QC_CONTRACTORS/READ ME.txt"]
-
-        def requires(self):
-            attachs = [*Path("C:/apps/KRONOS_LOAD_SQL/EXCEL/QC_CONTRACTORS").rglob('*')]
-            return [ExtraData(str(a)) for a in attachs[1:]]
-
-        def output(self):
-            return luigi.LocalTarget("mail.txt")
-
-
-    t = T()
-    luigi.build([t], local_scheduler=True)
 
