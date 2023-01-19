@@ -857,6 +857,29 @@ class ExternalTask(Task):
     run = None
 
 
+class ForceableTask(luigi.Task):
+    # from: https://github.com/spotify/luigi/issues/595#issuecomment-314127254
+
+    force = luigi.BoolParameter(significant=False, default=False)
+    force_upstream = luigi.BoolParameter(significant=False, default=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.force_upstream is True:
+            self.force = True
+        if self.force is True:
+            done = False
+            tasks = [self]
+            while not done:
+                outputs = luigi.task.flatten(tasks[0].output())
+                [out.remove() for out in outputs if out.exists()]
+                if self.force_upstream is True:
+                    tasks += luigi.task.flatten(tasks[0].requires())
+                tasks.pop(0)
+                if len(tasks) == 0:
+                    done = True
+
+
 def externalize(taskclass_or_taskobject):
     """
     Returns an externalized version of a Task. You may both pass an
