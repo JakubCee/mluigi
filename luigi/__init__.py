@@ -22,7 +22,7 @@ from luigi.__meta__ import __version__
 
 from luigi import task
 from luigi.task import (
-    Task, Config, ExternalTask, WrapperTask, namespace, auto_namespace, DynamicRequirements,
+    Task, Config, ExternalTask, WrapperTask, namespace, auto_namespace, DynamicRequirements, ForceableTask
 )
 
 from luigi import target
