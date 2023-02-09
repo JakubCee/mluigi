@@ -6,8 +6,6 @@ from email.message import EmailMessage
 from email.utils import formatdate
 from pathlib import Path
 
-
-import luigi
 from luigi import Task
 from luigi.task import Config
 from luigi.parameter import Parameter, IntParameter, BoolParameter
@@ -25,22 +23,6 @@ class smtp_contrib(Config):
     password = Parameter(default=os.getenv("SMTP_PASSWORD",""), description="Password for SMTP server")
 
 
-
-
-host = "mail.medtronic.com"
-port = 25
-to = "jakub.cehak@medtronic.com"
-from_ = "luigi-no-reply@medtronic.com"
-cc = to[:]
-bcc = to[:]
-subject = "Luigi Test"
-html = True
-message = """
-<h1>Hello</h1>
-<p>This is test</p>
-"""
-
-
 def list_to_commas(list_of_args):
     if isinstance(list_of_args, list):
         return ",".join(list_of_args)
@@ -52,17 +34,17 @@ class SmtpMail(Task):
 
     host = _cfg.host
     port = _cfg.port
-    from_=_cfg.from_
-    html=_cfg.html
-    message = message
+    from_ = _cfg.from_
+    html = _cfg.html
+    message = ""
     local_hostname = _cfg.local_hostname
     tls = _cfg.tls
     ssl = _cfg.ssl
     username = _cfg.username
     password = _cfg.password
 
-    subject = "test luigi"
-    to = 'jakub.cehak@medtronic.com'
+    subject = "[Luigi]"
+    to = None
     cc = None
     bcc = None
     extra_attachments = None
@@ -88,14 +70,29 @@ class SmtpMail(Task):
         maintype, subtype = ctype.split("/", 1)
         return maintype, subtype
 
+    def _resolve_recipients(self, as_list=False):
+        recipients = {
+            "to": self.to.split(';') if self.to else [],
+            "cc": self.cc.split(';') if self.cc else [],
+            "bcc": self.bcc.split(';') if self.bcc else []
+        }
+        if as_list:
+            l = []
+            for i in recipients.values():
+                l += i
+            return l
+        else:
+            return recipients
+
     def _build_email(self):
         """
         Return Email object with specified args without attachments.
         """
+        recipients_dict = self._resolve_recipients(as_list=False)
         self.email = EmailMessage()
-        self.email["To"] = self.to
-        self.email["CC"] = self.cc
-        self.email["Bcc"] = self.bcc
+        self.email["To"] = recipients_dict['to']
+        self.email["CC"] = recipients_dict['cc']
+        #self.email["Bcc"] = self.bcc.split(';') if self.bcc else []
         self.email["From"] = self.from_
         self.email["Subject"] = self.subject
         self.email["Date"] = formatdate(localtime=True)
@@ -108,14 +105,15 @@ class SmtpMail(Task):
         Shared function to add attachment to methods `_add_extra_attachments` and `input_attachments`.
         """
         attachment = Path(attachment)
-        maintype, subtype = self._get_mimetype(attachment)
-        email.add_attachment(
-            attachment.read_bytes(),
-            maintype=maintype,
-            subtype=subtype,
-            filename=attachment.name,
-        )
-        return email
+        if attachment.exists():
+            maintype, subtype = self._get_mimetype(attachment)
+            email.add_attachment(
+                attachment.read_bytes(),
+                maintype=maintype,
+                subtype=subtype,
+                filename=attachment.name,
+            )
+            return email
 
     def _add_extra_attachments(self, attachments):
         """
@@ -150,7 +148,9 @@ class SmtpMail(Task):
             self._add_extra_attachments(self.extra_attachments)
         # include attachments from self.input(), if overwritten, do nothing, just send without attachment.
         self.input_attachments()
-        self.smtp_server.send_message(self.email)
+        # resolve recipients, cc and bcc
+        recipients_list = self._resolve_recipients(as_list=True)
+        self.smtp_server.send_message(self.email, to_addrs=recipients_list)
         with self.output().open('w') as f:
             f.write(str(mail_no_attachments))
 
