@@ -3,7 +3,7 @@ Example
 =======
 
 Run as::
-    $ Set-Variable LUIGI_CONFIG_PATH "C:/apps/_PACKAGES/mluigi/luigi.cfg"
+    $ Set-Variable LUIGI_CONFIG_PATH "path/to/config/luigi.cfg"
     $ luigi --module examples.smtp_contrib MyFlow --local-scheduler
 
 
@@ -14,29 +14,32 @@ from pathlib import Path
 import os
 from luigi.format import Nop
 from dotenv import load_dotenv
+from datetime import datetime
 
 
 load_dotenv("local_testing.env", override=True)
 
 
 class ExtraData(luigi.ExternalTask):
-   attachment = luigi.Parameter()
-   def output(self):
-       return luigi.LocalTarget(path=self.attachment, format=Nop)
+    attachment = luigi.Parameter()
+
+    def output(self):
+        return luigi.LocalTarget(path=self.attachment, format=Nop)
+
 
 class MyFlow(SmtpMail):
-   extra_attachments = ["C:/apps/KRONOS_LOAD_SQL/EXCEL/QC_CONTRACTORS/KRONOS_QC_LINK_WRONG_BOOKINGS_CONTRACTORS.xlsx"]
-   #host="mail.medtronic.com"
-   #port=25
+    extra_attachments = ["test/_data/file1.txt"]
+    cc = os.getenv("MAIL_TEST_TO")
+    subject = f'TEST EMAIL at {datetime.now().strftime("%H%M%S")}'
 
-   def requires(self):
-       attachs = [*Path("C:/apps/KRONOS_LOAD_SQL/EXCEL/QC_CONTRACTORS").rglob('*')]
-       return [ExtraData(str(a)) for a in attachs[1:]]
+    def requires(self):
+        attachs = [*Path("test/_data").rglob('*')]
+        return [ExtraData(str(a)) for a in attachs[1:]]
 
-   def output(self):
-       return luigi.LocalTarget("mail.txt")
-
+    def output(self):
+        ts = datetime.now().strftime('%Y%m%d%H%M%S')
+        return luigi.LocalTarget(f"mail_{ts}.txt")
 
 
 if __name__ == "__main__":
-     luigi.run()
+    luigi.run()
