@@ -148,6 +148,7 @@ import logging
 import luigi
 import os
 import sqlalchemy
+import pandas as pd
 
 from luigi.mock import MockTarget
 
@@ -466,3 +467,50 @@ class SQLAlchemyProcedure(luigi.Task):
     def output(self):
         fn = "".join([ch for ch in self.procedure_call if ch.isalnum()])
         return MockTarget(fn)
+
+
+class SqlToExcelTask(luigi.Task):
+    out_file: [str, os.PathLike] = f"Export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    connection_string: str = None
+    sheet_cmd_dict: dict[str, str] = {}
+    pd_read_sql_kwargs: dict = {}
+    pd_writer_kwargs: dict = {}
+    pd_to_excel_kwargs: dict = {}
+    col_max_width: int = None
+
+    def output(self):
+        return luigi.LocalExcelTarget(str(self.out_file))
+
+    def _get_engine(self):
+        self.engine = sqlalchemy.create_engine(self.connection_string)
+        return self.engine
+
+    def _get_data(self):
+        """Connect to SQL and load dataframes into self._dataframes."""
+
+        self._dataframes = {}
+        engine = self._get_engine()
+        for sheet_name, cmd in self.sheet_cmd_dict.items():
+            df = pd.read_sql(cmd, engine, **self.pd_read_sql_kwargs)
+            self._dataframes[sheet_name] = df
+        return self._dataframes
+
+    def run(self):
+        if not self.connection_string:
+            raise AttributeError("Connection string is empty")
+        dataframes_dict = self._get_data()
+        # init writer
+        with pd.ExcelWriter(self.output().path, engine='xlsxwriter', **self.pd_writer_kwargs) as writer:
+            # put each df into writer
+            for sheet, data in dataframes_dict.items():
+                data.to_excel(writer, sheet_name=sheet[:31], index=False, **self.pd_to_excel_kwargs)
+
+                # adjust columns
+                if self.col_max_width:
+                    for column in data:
+                        col_width_max = min(
+                            max(data[column].astype(str).map(len).max(), len(column)),
+                            self.col_max_width,
+                        )
+                        col_idx = data.columns.get_loc(column)
+                        writer.sheets[sheet[:31]].set_column(col_idx, col_idx, col_width_max+3)

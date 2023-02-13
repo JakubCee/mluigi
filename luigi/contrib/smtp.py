@@ -6,6 +6,7 @@ from email.message import EmailMessage
 from email.utils import formatdate
 from pathlib import Path
 
+import luigi
 from luigi import Task
 from luigi.task import Config
 from luigi.parameter import Parameter, IntParameter, BoolParameter
@@ -133,8 +134,11 @@ class SmtpMail(Task):
 
     def input_attachments(self):
         """Overwrite with `pass` if input should not be included."""
-        for i in self.input():
-            self._add_attachment(attachment=i.path, email=self.email)
+        try:
+            for i in self.input():
+                self._add_attachment(attachment=i.path, email=self.email)
+        except TypeError:
+            self._add_attachment(attachment=self.input().path, email=self.email)
 
     def run(self):
         """

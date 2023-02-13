@@ -35,8 +35,7 @@ import luigi
 from luigi import configuration
 from luigi import parameter
 from luigi.task_register import Register
-from luigi.parameter import ParameterVisibility
-from luigi.parameter import UnconsumedParameterWarning
+from luigi.parameter import ParameterVisibility, BoolParameter, UnconsumedParameterWarning
 
 Parameter = parameter.Parameter
 logger = logging.getLogger('luigi-interface')
@@ -857,11 +856,11 @@ class ExternalTask(Task):
     run = None
 
 
-class ForceableTask(luigi.Task):
+class ForceableTask(Task):
     # from: https://github.com/spotify/luigi/issues/595#issuecomment-314127254
 
-    force = luigi.BoolParameter(significant=False, default=False)
-    force_upstream = luigi.BoolParameter(significant=False, default=False)
+    force = BoolParameter(significant=False, default=False)
+    force_upstream = BoolParameter(significant=False, default=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
