@@ -22,7 +22,7 @@ class SqlExcelDump(SqlToExcelTask):
 
 class SendDataByMail(SmtpMail):
     to = os.getenv("MAIL_TEST_TO")
-    
+
     def requires(self):
         return SqlExcelDump()
 
