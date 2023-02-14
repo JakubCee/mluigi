@@ -144,6 +144,11 @@ class SharepointClient(FileSystem):
         if spo.exists:
             spo.obj.delete_object().execute_query()
 
+    def rename(self, path, new_name):
+        spo = self._get_path_type(path)
+        spo.obj = spo.obj.rename(new_name).execute_query()
+        return spo
+
     def move(self, path, dest):
         pass
 
@@ -153,14 +158,42 @@ class SharepointClient(FileSystem):
     def download_as_bytes(self, path):
         pass
 
-    def upload(self, local_path, dest_path):
-        pass
+    def upload(self, local_path, dest_path, in_session=False):
+        is_big = os.path.getsize(local_path) > 100_000_000
+        if in_session or is_big:
+            self._upload_large_file(local_path=local_path, dest_path=dest_path)
+        else:
+            self._upload_small_file(local_path=local_path, dest_path=dest_path)
+
+    def _upload_prepare(self, local_path, dest_path):
+        local_path = Path(local_path)
+        spo = self._get_path_type(dest_path)
+        if spo.type == 'file':
+            logger.warning("Destination path must be a folder!")
+            return
+        if not spo.exists:
+            spo = self.ensure_path(dest_path)
+        return local_path, spo
 
     def _upload_large_file(self, local_path, dest_path):
-        pass
+        local_path, spo = self._upload_prepare(local_path, dest_path)
+        chunk_size = 4_000_000
+        file_size = os.path.getsize(local_path)
+
+        def print_progress(offset):
+            m = 1_000_000
+            print(f"Uploaded {offset/m}MB from {file_size/m}MB...[{offset/file_size:0.0%}]")
+
+        with open(local_path, "rb") as f:
+            upl_file = spo.obj.files.create_upload_session(f, chunk_size, print_progress).execute_query()
+        assert self.exists(upl_file.properties["ServerRelativeUrl"])
 
     def _upload_small_file(self, local_path, dest_path):
-        pass
+        local_path, spo = self._upload_prepare(local_path, dest_path)
+        with open(local_path, "rb") as f:
+            content = f.read()
+        upl_file = spo.obj.upload_file(local_path.name, content).execute_query()
+        assert self.exists(upl_file.properties["ServerRelativeUrl"])
 
 
 
@@ -186,6 +219,8 @@ if __name__ == "__main__":
 
     shpc = SharepointClient(site_url=SITE_URL, api_key=API_KEY, api_id=API_ID)
 
-    p = shpc.listdir("/xUnitTests_SHP/test_mluigi", recursive=True, what="folder")
-    print(p)
-    #print(shpc.listdir("xUnitTests_SHP/test_mluigi/test_exists"))
+    #p = shpc.listdir("/xUnitTests_SHP/test_mluigi", recursive=True, what="folder")
+    shpc.upload(
+        "C:/Users/cehakj2/OneDrive - Medtronic PLC/Desktop/dektop_stuff/drive-download-20210706T074211Z-001.zip",
+                #"C:/apps/_TESTS/luigi_testing/luigi.cfg",
+    "/xUnitTests_SHP/test_mluigi/test_large_upload")
