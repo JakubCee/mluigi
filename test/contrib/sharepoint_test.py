@@ -55,3 +55,16 @@ class TestSharepointClient:
                     '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_exists/File1.txt']
         assert SPClient.listdir("/teams/OSAReport/xUnitTests_SHP/test_mluigi") == exp_list
         assert len(SPClient.listdir("/teams/OSAReport/xUnitTests_SHP/test_mluigi", recursive=False)) < len(exp_list)
+
+
+    def test_download_file(self, SPClient):
+        stream = SPClient.download_as_bytes("/xUnitTests_SHP/test_mluigi/test_download/FileBinary.xlsx")
+        assert stream
+
+    def test_download_dir(self, SPClient):
+        with pytest.raises(FileExistsError, match="is not a file"):
+            SPClient.download_as_bytes("/xUnitTests_SHP/test_mluigi/test_download")
+
+    def test_download_nonexisting(self, SPClient):
+        with pytest.raises(FileExistsError, match="does not exist"):
+            SPClient.download_as_bytes("/xUnitTests_SHP/test_mluigi/test_download/nonexistingpath")

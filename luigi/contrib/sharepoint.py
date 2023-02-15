@@ -11,6 +11,8 @@ from functools import wraps
 from urllib.parse import urlparse
 from collections import namedtuple
 from dataclasses import dataclass
+from io import BytesIO
+
 
 #sharepoint_obj = namedtuple("sharepoint_obj", ["path", "type", "obj", "exists"])
 
@@ -135,7 +137,7 @@ class SharepointClient(FileSystem):
         return sorted(list(listed))
 
     @_safe_url(trim_site=True)
-    def ensure_path(self, path):
+    def mkdir(self, path, parents=True, raise_if_exists=False):
         tf = self.conn.web.ensure_folder_path(path).execute_query()
         return ShpObj(exists=True, obj=tf, type="folder")
 
@@ -155,8 +157,18 @@ class SharepointClient(FileSystem):
     def copy(self, path, dest):
         pass
 
+    @_safe_url(trim_site=False)
     def download_as_bytes(self, path):
-        pass
+        spo = self._get_path_type(path)
+        if not spo.exists:
+            raise FileExistsError(f"SP file `{path}` does not exists.")
+        if spo.type == "folder":
+            raise FileExistsError(f"SP path `{path}` is not a file.")
+        if spo.type == "file" and spo.exists:
+            with BytesIO() as stream:
+                self.conn.web.get_file_by_server_relative_path(path).download(stream).execute_query()
+                return stream.getvalue()
+
 
     def upload(self, local_path, dest_path, in_session=False):
         is_big = os.path.getsize(local_path) > 100_000_000
@@ -206,7 +218,6 @@ class SharepointTarget:
 
 
 if __name__ == "__main__":
-    import pytest
     from pathlib import Path
     from dotenv import load_dotenv
 
@@ -216,11 +227,10 @@ if __name__ == "__main__":
     API_ID = os.getenv("SHP_API_ID")
     API_KEY = os.getenv("SHP_API_KEY")
 
-
     shpc = SharepointClient(site_url=SITE_URL, api_key=API_KEY, api_id=API_ID)
+    stream = shpc.download_as_bytes("/xUnitTests_SHP/test_mluigi/test_exists")
 
-    #p = shpc.listdir("/xUnitTests_SHP/test_mluigi", recursive=True, what="folder")
-    shpc.upload(
-        "C:/Users/cehakj2/OneDrive - Medtronic PLC/Desktop/dektop_stuff/drive-download-20210706T074211Z-001.zip",
-                #"C:/apps/_TESTS/luigi_testing/luigi.cfg",
-    "/xUnitTests_SHP/test_mluigi/test_large_upload")
+    with open("op.pdf", "wb") as f:
+        f.write(stream)
+
+
