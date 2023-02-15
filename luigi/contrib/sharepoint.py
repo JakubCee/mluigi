@@ -204,7 +204,8 @@ class SharepointClient(FileSystem):
             logger.warning("Destination path must be a folder!")
             return
         if not spo.exists:
-            spo = self.ensure_path(dest_path)
+            dest_parent = str(Path(dest_path).parent)
+            spo = self.mkdir(dest_parent)
         return local_path, spo
 
     def _upload_large_file(self, local_path, dest_path):
@@ -222,9 +223,10 @@ class SharepointClient(FileSystem):
 
     def _upload_small_file(self, local_path, dest_path):
         local_path, spo = self._upload_prepare(local_path, dest_path)
+        filename = Path(dest_path).name
         with open(local_path, "rb") as f:
             content = f.read()
-        upl_file = spo.obj.upload_file(local_path.name, content).execute_query()
+        upl_file = spo.obj.upload_file(filename, content).execute_query()
         assert self.exists(upl_file.properties["ServerRelativeUrl"])
 
 
@@ -264,29 +266,56 @@ class ReadableSharepointFile:
         return False
 
 
+class AtomicWriteableSharepointFile(AtomicLocalFile):
+    def __init__(self, path, client):
+        """
+        Represents a file that will be created inside the Sharepoint site
+        :param str path: Destination path inside Sharepoint
+        :param SharepointClient: a SharepointClient object (initialized with a valid api id and key)
+        """
+        super().__init__(path)
+        self.path = path
+        self.client: SharepointClient = client
+
+    def move_to_final_destination(self):
+        """
+        After editing the file locally, this function uploads it to the Sharepoint
+        """
+        logger.warning(f"Calling Atomic write: self.tmp_path = {self.tmp_path}, self.path={self.path}")
+        self.client.upload(self.tmp_path, self.path)
 
 
-class SharepointTarget:
-    pass
+class SharepointTarget(FileSystemTarget):
+    def __init__(self, path, site_url: str, api_id: str, api_key: str, format=None):
+        #super().__init__(path)
+
+        self.path = path
+        self.site_url = site_url
+        self.client = SharepointClient(site_url=site_url, api_id=api_id, api_key=api_key)
+        self.format = format or luigi.format.get_default_format()
+
+    @property
+    def fs(self):
+        return self.client
+
+    @contextmanager
+    def temporary_path(self):
+        tmp_dir = tempfile.mkdtemp()
+        num = random.randrange(0, 10_000_000_000)
+        temp_path = '{}{}luigi-tmp-{:010}{}'.format(
+            tmp_dir, os.sep,
+            num, ntpath.basename(self.path))
+
+        yield temp_path
+        # We won't reach here if there was an user exception.
+        self.fs.upload(temp_path, self.path)
+
+    def open(self, mode):
+        if mode not in ('r', 'w'):
+            raise ValueError("Unsupported open mode '%s'" % mode)
+        if mode == 'r':
+            return self.format.pipe_reader(ReadableSharepointFile(self.path, self.client))
+        else:
+            return self.format.pipe_writer(AtomicWriteableSharepointFile(self.path, self.client))
 
 
-
-
-if __name__ == "__main__":
-    from pathlib import Path
-    from dotenv import load_dotenv
-
-    load_dotenv("C:/apps/_PACKAGES/mluigi/local_testing.env", override=True)
-
-    SITE_URL = os.getenv("SHP_SITE_URL")
-    API_ID = os.getenv("SHP_API_ID")
-    API_KEY = os.getenv("SHP_API_KEY")
-
-    shpc = SharepointClient(site_url=SITE_URL, api_key=API_KEY, api_id=API_ID)
-
-    #o = shpc.conn.web.get_folder_by_server_relative_path("/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_copy/to").expand([]).get().execute_query()
-    #o.get_property("Exists")
-    spo = shpc._get_path_type("xUnitTests_SHP/test_mluigi/test_notexists")
-    #spo.obj.copyto("xUnitTests_SHP/test_mluigi/test_copy/Original.xlsx", overwrite=True).execute_query()
-
-    print(spo.obj.properties)

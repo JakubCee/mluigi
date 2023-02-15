@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     Path("SqlToExcelDumpTest.xlsx").unlink(missing_ok=True)
 
-    task = SendDataByMail()
+    task = SqlExcelDump()
     luigi.build([task], local_scheduler=True)
 
 
