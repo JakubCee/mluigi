@@ -228,6 +228,41 @@ class SharepointClient(FileSystem):
         assert self.exists(upl_file.properties["ServerRelativeUrl"])
 
 
+class ReadableSharepointFile:
+    def __init__(self, path, client):
+        self.path = path
+        self.client: SharepointClient = client
+        self.download_file_location = os.path.join(tempfile.mkdtemp(prefix=str(time.time())),
+                                                   ntpath.basename(path)) # TODO: review tis
+        self.fid = None
+        self.closed = False
+
+    def read(self):
+        return self.client.download_as_bytes(self.path)
+
+    def close(self):
+        self.closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __del__(self):
+        self.close()
+        if os.path.exists(self.download_file_location):
+            os.remove(self.download_file_location)
+
+    def readable(self):
+        return True
+
+    def writable(self):
+        return False
+
+    def seekable(self):
+        return False
+
 
 
 
