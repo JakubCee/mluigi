@@ -59,7 +59,6 @@ class TestSharepointClient:
             assert l in exp_list, f"{l} is not present in Expected list"
         assert len(SPClient.listdir("/teams/OSAReport/xUnitTests_SHP/test_mluigi", recursive=False)) < len(exp_list)
 
-
     def test_download_file(self, SPClient):
         stream = SPClient.download_as_bytes("/xUnitTests_SHP/test_mluigi/test_download/FileBinary.xlsx")
         assert stream

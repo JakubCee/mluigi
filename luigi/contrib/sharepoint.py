@@ -85,7 +85,7 @@ class SharepointClient(FileSystem):
         self.conn = ClientContext(site_url).with_credentials(client_credentials)
 
     @_safe_url(trim_site=False)
-    def _get_path_type(self, path):
+    def _get_path_type(self, path, raise_not_exists=False):
         def get_sp_object(path, type="file"):
             if type == "file":
                 o = self.conn.web.get_file_by_server_relative_path(path).get().execute_query()
@@ -102,6 +102,8 @@ class SharepointClient(FileSystem):
                     return ShpObj(exists=True, obj=o, type=sp_type)
             except ClientRequestException:
                 continue
+        if raise_not_exists:
+            raise FileExistsError(f"Path `{path}` does not exist.")
         return ShpObj(exists=False, obj=None, type=None)
 
         #raise FileExistsError(f"Path {path} does not exists or cannot be found")
