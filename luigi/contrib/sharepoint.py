@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 from collections import namedtuple
 from dataclasses import dataclass
 from io import BytesIO
+from office365.runtime.client_request_exception import ClientRequestException
+
 
 
 #sharepoint_obj = namedtuple("sharepoint_obj", ["path", "type", "obj", "exists"])
@@ -84,18 +86,27 @@ class SharepointClient(FileSystem):
 
     @_safe_url(trim_site=False)
     def _get_path_type(self, path):
-        try:
-            dir = self.conn.web.get_folder_by_server_relative_path(path).select(["Exists"]).get().execute_query()
-            if dir.exists:
-                return ShpObj(exists=True, obj=dir, type="folder")
-
-            file = self.conn.web.get_file_by_server_relative_path(path).select(["Exists"]).get().execute_query()
-            if file.exists:
-                return ShpObj(exists=True, obj=file, type="file")
+        def get_sp_object(path, type="file"):
+            if type == "file":
+                o = self.conn.web.get_file_by_server_relative_path(path).get().execute_query()
+            elif type == "folder":
+                o = self.conn.web.get_folder_by_server_relative_path(path).get().execute_query()
             else:
-                return ShpObj(exists=False, obj=file, type="file")
-        except Exception as e:
-            return ShpObj(exists=False, obj=None, type=None)
+                return
+            return o
+
+        for sp_type in ("file", "folder"):
+            try:
+                o = get_sp_object(path=path, type=sp_type)
+                if o.properties.get("Exists"):
+                    return ShpObj(exists=True, obj=o, type=sp_type)
+            except ClientRequestException:
+                continue
+        return ShpObj(exists=False, obj=None, type=None)
+
+        #raise FileExistsError(f"Path {path} does not exists or cannot be found")
+
+
 
     def exists(self, path):
         spo = self._get_path_type(path)
@@ -238,7 +249,7 @@ if __name__ == "__main__":
 
     #o = shpc.conn.web.get_folder_by_server_relative_path("/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_copy/to").expand([]).get().execute_query()
     #o.get_property("Exists")
-    spo = shpc._get_path_type("/xUnitTests_SHP/test_mluigi/test_copy/to/Copy.xlsx")
+    spo = shpc._get_path_type("xUnitTests_SHP/test_mluigi/test_notexists")
     #spo.obj.copyto("xUnitTests_SHP/test_mluigi/test_copy/Original.xlsx", overwrite=True).execute_query()
 
     print(spo.obj.properties)

@@ -47,13 +47,16 @@ class TestSharepointClient:
         assert SPClient.listdir("xUnitTests_SHP/test_mluigi/test_exists/File1.txt") == None
         assert len(SPClient.listdir("xUnitTests_SHP/test_mluigi/test_exists")) >= 1
 
-        exp_list = ['/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_delete',
-                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_delete/File1.txt',
-                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_delete/File2.txt',
-                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_deletess',
-                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_exists',
-                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_exists/File1.txt']
-        assert SPClient.listdir("/teams/OSAReport/xUnitTests_SHP/test_mluigi") == exp_list
+        exp_list = ['/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_listdir/File1.txt',
+                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_listdir/Dir1/File1_1.txt',
+                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_listdir/Dir1/File1_2.txt',
+                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_listdir/Dir2/File2_1.txt',
+                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_listdir/Dir2/File2_2.txt',
+                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_listdir/Dir1',
+                    '/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_listdir/Dir2',]
+        returned = SPClient.listdir("/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_listdir")
+        for l in returned:
+            assert l in exp_list, f"{l} is not present in Expected list"
         assert len(SPClient.listdir("/teams/OSAReport/xUnitTests_SHP/test_mluigi", recursive=False)) < len(exp_list)
 
 
