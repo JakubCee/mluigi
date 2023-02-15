@@ -68,3 +68,7 @@ class TestSharepointClient:
     def test_download_nonexisting(self, SPClient):
         with pytest.raises(FileExistsError, match="does not exist"):
             SPClient.download_as_bytes("/xUnitTests_SHP/test_mluigi/test_download/nonexistingpath")
+
+    def test_copy_file(self, SPClient):
+        SPClient.copy(path="/xUnitTests_SHP/test_mluigi/test_copy/from/Original.xlsx",
+                      dest="/xUnitTests_SHP/test_mluigi/test_copy/to/Copy.xlsx")

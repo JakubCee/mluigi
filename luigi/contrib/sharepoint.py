@@ -145,6 +145,7 @@ class SharepointClient(FileSystem):
         spo = self._get_path_type(path)
         if spo.exists:
             spo.obj.delete_object().execute_query()
+            assert not self._get_path_type(path).exists
 
     def rename(self, path, new_name):
         spo = self._get_path_type(path)
@@ -154,8 +155,14 @@ class SharepointClient(FileSystem):
     def move(self, path, dest):
         pass
 
+    @_safe_url(trim_site=True)
     def copy(self, path, dest):
-        pass
+        spo = self._get_path_type(path)
+        if spo.exists and spo.type == "file":
+            dest = dest[1:] if dest.startswith("/") else dest
+            spo.obj.copyto(dest, overwrite=True)
+            assert self._get_path_type(dest).exists
+
 
     @_safe_url(trim_site=False)
     def download_as_bytes(self, path):
@@ -228,9 +235,10 @@ if __name__ == "__main__":
     API_KEY = os.getenv("SHP_API_KEY")
 
     shpc = SharepointClient(site_url=SITE_URL, api_key=API_KEY, api_id=API_ID)
-    stream = shpc.download_as_bytes("/xUnitTests_SHP/test_mluigi/test_exists")
 
-    with open("op.pdf", "wb") as f:
-        f.write(stream)
+    #o = shpc.conn.web.get_folder_by_server_relative_path("/teams/OSAReport/xUnitTests_SHP/test_mluigi/test_copy/to").expand([]).get().execute_query()
+    #o.get_property("Exists")
+    spo = shpc._get_path_type("/xUnitTests_SHP/test_mluigi/test_copy/to/Copy.xlsx")
+    #spo.obj.copyto("xUnitTests_SHP/test_mluigi/test_copy/Original.xlsx", overwrite=True).execute_query()
 
-
+    print(spo.obj.properties)
