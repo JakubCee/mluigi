@@ -4,7 +4,10 @@ import luigi
 from luigi.contrib.sqla import SqlToExcelTask
 from dotenv import load_dotenv
 from luigi.format import Nop
-from luigi import LocalExcelTarget
+from datetime import datetime
+
+
+TS = datetime.now().strftime("%Y%m%d%H%M%S_")
 
 load_dotenv("local_testing.env", override=True)
 
@@ -23,16 +26,26 @@ class SqlExcelDump(SqlToExcelTask):
 
 
 class InputFileToCopy(luigi.ExternalTask):
+    is_large = luigi.BoolParameter(default=False)
+
+    def run(self):
+        content = b"X\n\xe2\x28\xa1"
+        content = content if not self.is_large else content * 21_000_000
+        with self.output().open('w') as f:
+            f.write(content)
+
     def output(self):
         return luigi.LocalTarget("test_file_large.bin", format=Nop)
 
-class CopyToShp(luigi.Task):
+
+class CopyToShpTempFile(luigi.Task):
+    is_large = luigi.BoolParameter(default=False)
 
     def requires(self):
-        return InputFileToCopy()
+        return InputFileToCopy(is_large=self.is_large)
 
     def output(self):
-        return SharepointTarget(path="/xUnitTests_SHP/test_mluigi/test_pipes/large_bin_file.bin",
+        return SharepointTarget(path=f"/xUnitTests_SHP/test_mluigi/test_pipes/large_bin_file_from_temp{TS}.bin",
                                 site_url=SITE_URL,
                                 api_id=API_ID,
                                 api_key=API_KEY,
@@ -40,13 +53,30 @@ class CopyToShp(luigi.Task):
                                 )
 
     def run(self):
-        with self.input().open('r') as inf:
-            with self.output().temporary_path() as tp:
-                with open(tp, "wb") as out_file:
-                    out_file.write(inf.read())
+        with self.output().temporary_path() as tp:
+            with open(tp, "wb") as out_file:
+                with self.input().open('r') as i:
+                    out_file.write(i.read())
 
-            # with self.output().open("w") as spf:
-            #     spf.write(inf.read())
+
+class CopyToShp(luigi.Task):
+    is_large = luigi.BoolParameter(default=True)
+
+    def requires(self):
+        return InputFileToCopy(is_large=self.is_large)
+
+    def output(self):
+        return SharepointTarget(path=f"/xUnitTests_SHP/test_mluigi/test_pipes/large_bin_file{TS}.bin",
+                                site_url=SITE_URL,
+                                api_id=API_ID,
+                                api_key=API_KEY,
+                                format=Nop
+                                )
+
+    def run(self):
+        with self.output().open('w') as f:
+            with self.input().open('r') as i:
+                f.write(i.read())
 
 
 class FromSpToLocal(luigi.Task):
@@ -67,6 +97,6 @@ class FromSpToLocal(luigi.Task):
             xlo.write(content)
 
 
-task = CopyToShp()
+task = CopyToShp(is_large=False)
 luigi.build([task], local_scheduler=True)
 

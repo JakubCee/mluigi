@@ -190,9 +190,10 @@ class SharepointClient(FileSystem):
                 return stream.getvalue()
 
 
-    def upload(self, local_path, dest_path, in_session=True):
-        is_big = os.path.getsize(local_path) > 100_000_000
+    def upload(self, local_path, dest_path, in_session=False):
+        is_big = os.path.getsize(local_path) > 150_000_000
         if in_session or is_big:
+            logger.info(f"Upload of file `{Path(dest_path).name}` will run in upload session")
             self._upload_large_file(local_path=local_path, dest_path=dest_path)
         else:
             self._upload_small_file(local_path=local_path, dest_path=dest_path)
@@ -279,7 +280,6 @@ class AtomicWriteableSharepointFile(AtomicLocalFile):
 
     def generate_tmp_path(self, path):
         return os.path.join(tempfile.gettempdir(),
-                            #'luigi-s3-tmp-%09d' % random.randrange(0, 10_000_000_000),
                             os.path.basename(path)
         )
 
@@ -287,7 +287,6 @@ class AtomicWriteableSharepointFile(AtomicLocalFile):
         """
         After editing the file locally, this function uploads it to the Sharepoint
         """
-        logger.warning(f"Calling Atomic write: self.tmp_path = {self.tmp_path}, self.path={self.path}")
         self.client.upload(self.tmp_path, self.path)
 
 
@@ -306,15 +305,15 @@ class SharepointTarget(FileSystemTarget):
 
     @contextmanager
     def temporary_path(self):
-        tmp_dir = tempfile.mkdtemp()
         num = random.randrange(0, 10_000_000_000)
-        temp_path = '{}{}luigi-tmp-{:010}{}'.format(
-            tmp_dir, os.sep,
-            num, ntpath.basename(self.path))
+        tmp_dir = tempfile.TemporaryDirectory(prefix=f"luigi-tmp-{num}")
+        filename = Path(self.path).name
+        td_path = str(Path(tmp_dir.name) / filename)
 
-        yield temp_path
+        yield str(td_path)
         # We won't reach here if there was a user exception.
-        self.fs.upload(temp_path, self.path)
+        self.fs.upload(td_path, self.path)
+        tmp_dir.cleanup()
 
     def open(self, mode):
         if mode not in ('r', 'w'):
