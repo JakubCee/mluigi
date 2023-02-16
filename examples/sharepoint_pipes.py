@@ -22,24 +22,36 @@ class SqlExcelDump(SqlToExcelTask):
     out_file = "SqlToExcelDumpTest.xlsx"
 
 
+class InputFileToCopy(luigi.ExternalTask):
+    def output(self):
+        return luigi.LocalTarget("test_file_large.bin", format=Nop)
+
 class CopyToShp(luigi.Task):
 
+    def requires(self):
+        return InputFileToCopy()
+
     def output(self):
-        return SharepointTarget(path="/xUnitTests_SHP/test_mluigi/test_pipes/file.txt",
+        return SharepointTarget(path="/xUnitTests_SHP/test_mluigi/test_pipes/large_bin_file.bin",
                                 site_url=SITE_URL,
                                 api_id=API_ID,
                                 api_key=API_KEY,
-                                #format=Nop
+                                format=Nop
                                 )
 
     def run(self):
-        with self.output().open("w") as spf:
-            spf.write("Hello Test")
+        with self.input().open('r') as inf:
+            with self.output().temporary_path() as tp:
+                with open(tp, "wb") as out_file:
+                    out_file.write(inf.read())
+
+            # with self.output().open("w") as spf:
+            #     spf.write(inf.read())
 
 
 class FromSpToLocal(luigi.Task):
     def output(self):
-        return luigi.LocalTarget("FileBinary.xlsx", format=Nop)
+        return luigi.LocalTarget("test_file_large.bin", format=Nop)
 
     def run(self):
         input = SharepointTarget(path="/xUnitTests_SHP/test_mluigi/test_download/FileBinary.xlsx",

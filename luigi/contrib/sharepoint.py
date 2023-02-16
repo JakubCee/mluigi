@@ -190,7 +190,7 @@ class SharepointClient(FileSystem):
                 return stream.getvalue()
 
 
-    def upload(self, local_path, dest_path, in_session=False):
+    def upload(self, local_path, dest_path, in_session=True):
         is_big = os.path.getsize(local_path) > 100_000_000
         if in_session or is_big:
             self._upload_large_file(local_path=local_path, dest_path=dest_path)
@@ -277,6 +277,12 @@ class AtomicWriteableSharepointFile(AtomicLocalFile):
         self.path = path
         self.client: SharepointClient = client
 
+    def generate_tmp_path(self, path):
+        return os.path.join(tempfile.gettempdir(),
+                            #'luigi-s3-tmp-%09d' % random.randrange(0, 10_000_000_000),
+                            os.path.basename(path)
+        )
+
     def move_to_final_destination(self):
         """
         After editing the file locally, this function uploads it to the Sharepoint
@@ -307,7 +313,7 @@ class SharepointTarget(FileSystemTarget):
             num, ntpath.basename(self.path))
 
         yield temp_path
-        # We won't reach here if there was an user exception.
+        # We won't reach here if there was a user exception.
         self.fs.upload(temp_path, self.path)
 
     def open(self, mode):
