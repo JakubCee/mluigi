@@ -48,7 +48,7 @@ except ImportError:
 
 
 def _as_parts(path):
-    return [p for p in path.split("/") if p]
+    return [p for p in str(path).split("/") if p]
 
 
 def _safe_url(trim_site: bool = False):
@@ -100,8 +100,12 @@ class SharepointClient(FileSystem):
                 o = get_sp_object(path=path, type=sp_type)
                 if o.properties.get("Exists"):
                     return ShpObj(exists=True, obj=o, type=sp_type)
-            except ClientRequestException:
-                continue
+            except ClientRequestException as e:
+                if e.response.status_code == 404:
+                    continue
+                else:
+                    raise ValueError(e.response.text)
+
         if raise_not_exists:
             raise FileExistsError(f"Path `{path}` does not exist.")
         return ShpObj(exists=False, obj=None, type=None)
@@ -166,7 +170,10 @@ class SharepointClient(FileSystem):
         return spo
 
     def move(self, path, dest):
-        pass
+        # TODO: implement
+        spo = self._get_path_type(path)
+        spo.obj = spo.obj.moveto(dest, 1).execute_query()
+        return spo
 
     @_safe_url(trim_site=True)
     def copy(self, path, dest):
@@ -205,7 +212,7 @@ class SharepointClient(FileSystem):
             logger.warning("Destination path must be a folder!")
             return
         if not spo.exists:
-            dest_parent = str(Path(dest_path).parent)
+            dest_parent = Path(dest_path).as_posix()
             spo = self.mkdir(dest_parent)
         return local_path, spo
 
@@ -224,7 +231,7 @@ class SharepointClient(FileSystem):
 
     def _upload_small_file(self, local_path, dest_path):
         local_path, spo = self._upload_prepare(local_path, dest_path)
-        filename = Path(dest_path).name
+        filename = Path(local_path).name
         with open(local_path, "rb") as f:
             content = f.read()
         upl_file = spo.obj.upload_file(filename, content).execute_query()
@@ -308,9 +315,9 @@ class SharepointTarget(FileSystemTarget):
         num = random.randrange(0, 10_000_000_000)
         tmp_dir = tempfile.TemporaryDirectory(prefix=f"luigi-tmp-{num}")
         filename = Path(self.path).name
-        td_path = str(Path(tmp_dir.name) / filename)
+        td_path = (Path(tmp_dir.name) / filename).as_posix()
 
-        yield str(td_path)
+        yield td_path
         # We won't reach here if there was a user exception.
         self.fs.upload(td_path, self.path)
         tmp_dir.cleanup()
