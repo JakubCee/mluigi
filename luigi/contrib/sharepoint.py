@@ -7,25 +7,32 @@ import random
 import tempfile
 import time
 from contextlib import contextmanager
-from functools import wraps
 from urllib.parse import urlparse
-from collections import namedtuple
 from dataclasses import dataclass
 from io import BytesIO
-from office365.runtime.client_request_exception import ClientRequestException
+import luigi.format
+from luigi.target import FileSystem, FileSystemTarget, AtomicLocalFile
 
+logger = logging.getLogger('luigi-interface')
+try:
+    from office365.runtime.auth.client_credential import ClientCredential
+    from office365.sharepoint.client_context import ClientContext
+    from office365.runtime.client_request_exception import ClientRequestException
+except ImportError:
+    logger.warning("Loading SharePoint module without required package `Office365-REST-Python-Client`. "
+                   "Will crash at runtime if SharePoint functionality is used.")
 
-
-#sharepoint_obj = namedtuple("sharepoint_obj", ["path", "type", "obj", "exists"])
 
 @dataclass
 class ShpObj:
+    """Represents SharePoint data used in methods."""
     type: str
     exists: bool
     path: str = None
     obj: typing.Any = None
 
     def __post_init__(self):
+        """Retrieve Relative url from SharePoint object."""
         if self.obj:
             try:
                 self.path = self.obj.properties["ServerRelativeUrl"]
@@ -33,25 +40,13 @@ class ShpObj:
                 pass
 
 
-
-import luigi.format
-from luigi.target import FileSystem, FileSystemTarget, AtomicLocalFile
-
-logger = logging.getLogger('luigi-interface')
-
-try:
-    from office365.runtime.auth.client_credential import ClientCredential
-    from office365.sharepoint.client_context import ClientContext
-except ImportError:
-    logger.warning("Loading SharePoint module without required package `Office365-REST-Python-Client`. "
-                   "Will crash at runtime if SharePoint functionality is used.")
-
-
 def _as_parts(path):
+    """Helper function to split path by slashes into list of parts."""
     return [p for p in str(path).split("/") if p]
 
 
 def _safe_url(trim_site: bool = False):
+    """Decorator adjusts path argument to compatible with SharePoint API."""
     def inner(func):
         def wrapper(self, path, *args, **kwargs):
             site_parts = [
@@ -69,7 +64,6 @@ def _safe_url(trim_site: bool = False):
                 path = "/".join(site_parts + rel_parts_only)
 
             path = "/" + path
-            logger.info(f"Decorated path is now: {path}")
             return func(self, path, *args, **kwargs)
         return wrapper
     return inner
@@ -86,7 +80,9 @@ class SharepointClient(FileSystem):
 
     @_safe_url(trim_site=False)
     def _get_path_type(self, path, raise_not_exists=False):
+        """Returns SharePoint object dataclass. Method detects if path is folder or file."""
         def get_sp_object(path, type="file"):
+            """Method detects if path is folder or file."""
             if type == "file":
                 o = self.conn.web.get_file_by_server_relative_path(path).get().execute_query()
             elif type == "folder":
@@ -110,15 +106,13 @@ class SharepointClient(FileSystem):
             raise FileExistsError(f"Path `{path}` does not exist.")
         return ShpObj(exists=False, obj=None, type=None)
 
-        #raise FileExistsError(f"Path {path} does not exists or cannot be found")
-
-
-
     def exists(self, path):
+        """Does path exist?"""
         spo = self._get_path_type(path)
         return spo.exists
 
     def isdir(self, path):
+        """Is path folder?"""
         spo = self._get_path_type(path)
         if spo.exists:
             return spo.type == "folder"
@@ -128,6 +122,12 @@ class SharepointClient(FileSystem):
 
     @_safe_url(trim_site=False)
     def listdir(self, path, **kwargs):
+        """Gets content of the path - files and folders. Option to add:
+
+        :param str what: ("all", "file", "folder") : will list paths for that type only
+        :param bool recursive: (True) :  recursive listing in case of folder paths.
+
+        """
         def enum_folder(parent_folder, recursive: bool = False):
             """Expand parent folder and yield files and folders. Folders will be scanned recursively if needed."""
             parent_folder.expand(["Files", "Folders"]).get().execute_query()
@@ -155,37 +155,43 @@ class SharepointClient(FileSystem):
 
     @_safe_url(trim_site=True)
     def mkdir(self, path, parents=True, raise_if_exists=False):
+        """Create folder in path."""
         tf = self.conn.web.ensure_folder_path(path).execute_query()
         return ShpObj(exists=True, obj=tf, type="folder")
 
     def remove(self, path, recursive=True, skip_trash=True):
+        """Removes object in path."""
         spo = self._get_path_type(path)
         if spo.exists:
             spo.obj.delete_object().execute_query()
             assert not self._get_path_type(path).exists
 
     def rename(self, path, new_name):
+        """Renames object in path."""
         spo = self._get_path_type(path)
         spo.obj = spo.obj.rename(new_name).execute_query()
         return spo
 
     def move(self, path, dest):
-        # TODO: implement
+        """Move object from path to dest. Paths must be on files level, including destination. """
         spo = self._get_path_type(path)
         spo.obj = spo.obj.moveto(dest, 1).execute_query()
         return spo
 
     @_safe_url(trim_site=True)
     def copy(self, path, dest):
+        """Copy files, must be on file level."""
         spo = self._get_path_type(path)
         if spo.exists and spo.type == "file":
             dest = dest[1:] if dest.startswith("/") else dest
             spo.obj.copyto(dest, overwrite=True)
             assert self._get_path_type(dest).exists
-
+        else:
+            raise FileExistsError(f"Path {path} is not a file or does not exist.")
 
     @_safe_url(trim_site=False)
     def download_as_bytes(self, path):
+        """Download file from path and return as bytes."""
         spo = self._get_path_type(path)
         if not spo.exists:
             raise FileExistsError(f"SP file `{path}` does not exists.")
@@ -196,8 +202,11 @@ class SharepointClient(FileSystem):
                 self.conn.web.get_file_by_server_relative_path(path).download(stream).execute_query()
                 return stream.getvalue()
 
-
     def upload(self, local_path, dest_path, in_session=False):
+        """Upload data to destination (folder) from local path. Filename on destination will be same as local file.
+
+        Parameter ``in_session`` will trigger upload in chunks.
+        Simple upload works only files smaller than ca. 150 MB"""
         is_big = os.path.getsize(local_path) > 150_000_000
         if in_session or is_big:
             logger.info(f"Upload of file `{Path(dest_path).name}` will run in upload session")
@@ -206,6 +215,7 @@ class SharepointClient(FileSystem):
             self._upload_small_file(local_path=local_path, dest_path=dest_path)
 
     def _upload_prepare(self, local_path, dest_path):
+        """Helper function for uploading, checks if exists and """
         local_path = Path(local_path)
         spo = self._get_path_type(dest_path)
         if spo.type == 'file':
@@ -217,19 +227,21 @@ class SharepointClient(FileSystem):
         return local_path, spo
 
     def _upload_large_file(self, local_path, dest_path):
+        """Upload in session."""
         local_path, spo = self._upload_prepare(local_path, dest_path)
         chunk_size = 4_000_000
         file_size = os.path.getsize(local_path)
 
         def print_progress(offset):
             m = 1_000_000
-            print(f"Uploaded {offset/m}MB from {file_size/m}MB...[{offset/file_size:0.0%}]")
+            logger.debug(f"Uploaded {offset/m}MB from {file_size/m}MB...[{offset/file_size:0.0%}]")
 
         with open(local_path, "rb") as f:
             upl_file = spo.obj.files.create_upload_session(f, chunk_size, print_progress).execute_query()
         assert self.exists(upl_file.properties["ServerRelativeUrl"])
 
     def _upload_small_file(self, local_path, dest_path):
+        """Upload at once."""
         local_path, spo = self._upload_prepare(local_path, dest_path)
         filename = Path(local_path).name
         with open(local_path, "rb") as f:
