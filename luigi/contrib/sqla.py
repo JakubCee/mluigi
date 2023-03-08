@@ -431,9 +431,18 @@ class CopyToTable(luigi.Task):
 
 
 class SQLAlchemyProcedure(luigi.Task):
-    connection_string = None
+    @property
+    @abc.abstractmethod
+    def connection_string(self):
+        return None
+
+    @property
+    @abc.abstractmethod
+    def procedure_call(self):
+        """Valid full command to be executed on SQL."""
+        return None
+
     echo = False
-    procedure_call = None
     engine_kwargs = {}
     _engine_dict = {}
     Connection = collections.namedtuple("Connection", ["engine", "pid"])
@@ -471,11 +480,25 @@ class SQLAlchemyProcedure(luigi.Task):
 
 class SqlToExcelTask(luigi.Task):
     out_file: [str, os.PathLike] = f"Export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    connection_string: str = None
-    sheet_cmd_dict: dict[str, str] = {}
+
+    @property
+    @abc.abstractmethod
+    def connection_string(self):
+        return None
+
+    @property
+    @abc.abstractmethod
+    def sheet_cmd_dict(self):
+        """Dictionary where key is Sheetname in Excel and cmd is valid pandas call to get data from connection."""
+        return None
+
+    # additional kwargs for pandas `read_sql` method
     pd_read_sql_kwargs: dict = {}
+    # additional kwargs for pandas Excel Writer object
     pd_writer_kwargs: dict = {}
+    # additional kwargs for pandas `to_excel` method
     pd_to_excel_kwargs: dict = {}
+    # Specify max width for columns in output
     col_max_width: int = None
 
     def output(self):
