@@ -74,7 +74,7 @@ class email(luigi.Config):
     method = luigi.parameter.ChoiceParameter(
         default='smtp',
         config_path=dict(section='email', name='type'),
-        choices=('smtp', 'sendgrid', 'ses', 'sns'),
+        choices=('smtp', 'sendgrid', 'ses', 'sns', 'msteams'),
         description='Method for sending e-mail')
     prefix = luigi.parameter.Parameter(
         default='',
@@ -133,6 +133,16 @@ class sendgrid(luigi.Config):
         config_path=dict(section='email', name='SENGRID_API_KEY'),
         description='API key for SendGrid login')
 
+
+class msteams(luigi.Config):
+    webhook_url_failure = luigi.parameter.Parameter(
+        config_path=dict(section="msteams", name="webhook_url_failure"),
+        description="Webhook URL for MS Teams channel for failures"
+    )
+    webhook_url_success = luigi.parameter.Parameter(
+            config_path=dict(section="msteams", name="webhook_url_success"),
+            description="Webhook URL for MS Teams channel for successful tasks"
+        )
 
 def generate_email(sender, subject, message, recipients, image_png):
     from email.mime.multipart import MIMEMultipart
@@ -252,6 +262,21 @@ def send_email_sendgrid(sender, subject, message, recipients, image_png):
     client.send(to_send)
 
 
+def sent_msteams(sender, subject, message, recipients, image_png):
+    import pymsteams
+
+    webhook = msteams().webhook_url_failure
+    ms_message = pymsteams.connectorcard(hookurl=webhook)
+    ms_message.title(subject)
+    ms_message.text(message)
+    ms_message.color("#FF0000")
+
+    try:
+        ms_message.send()
+    except Exception as e:
+        logger.error(f"Error while sending failure notification to MSTeams >> {e}")
+
+
 def _email_disabled_reason():
     if email().format == 'none':
         return "email format is 'none'"
@@ -302,10 +327,12 @@ def send_email(subject, message, sender, recipients, image_png=None):
         'sendgrid': send_email_sendgrid,
         'smtp': send_email_smtp,
         'sns': send_email_sns,
+        'msteams': sent_msteams,
     }
 
     subject = _prefix(subject)
     if not recipients or recipients == (None,):
+        logger.warning("No recipients set, returning...")
         return
 
     if _email_disabled_reason():
