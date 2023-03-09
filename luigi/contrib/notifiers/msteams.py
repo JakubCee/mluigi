@@ -69,23 +69,6 @@ class NotifiedTaskMixin():
                     tm.add_button(button_tup[0], button_tup[1])
             tm.send()
 
-        #super().__init__(*args, **kwargs)
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-
-    load_dotenv('local_testing.env', override=True)
-
-    class TestNotifiedTask(luigi.Task, NotifiedTaskMixin):
-        teams_message_text = "My custom message"
-        teams_buttons = [("Button1", "https://gooogl.com"), ("Button1", "https://sharepoint.com")]
-
-        def run(self):
-            return 1
-
-    t = TestNotifiedTask()
-    luigi.build([t], local_scheduler=True)
 
 
 
