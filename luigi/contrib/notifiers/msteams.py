@@ -43,7 +43,7 @@ class MsTeamsNotification:
         self.teams_msg.send()
 
 
-class NotifiedTask(luigi.Task):
+class NotifiedTaskMixin():
     # set optional text to show on task completion
     teams_message_text = None
     # button
@@ -69,7 +69,7 @@ class NotifiedTask(luigi.Task):
                     tm.add_button(button_tup[0], button_tup[1])
             tm.send()
 
-        super().__init__(*args, **kwargs)
+        #super().__init__(*args, **kwargs)
 
 
 if __name__ == "__main__":
@@ -77,7 +77,7 @@ if __name__ == "__main__":
 
     load_dotenv('local_testing.env', override=True)
 
-    class TestNotifiedTask(NotifiedTask):
+    class TestNotifiedTask(luigi.Task, NotifiedTaskMixin):
         teams_message_text = "My custom message"
         teams_buttons = [("Button1", "https://gooogl.com"), ("Button1", "https://sharepoint.com")]
 
