@@ -468,8 +468,9 @@ class SQLAlchemyProcedure(luigi.Task):
 
     def run(self):
         if self.procedure_call:
-            with self.engine.begin() as conn:
-                conn.execute(self.procedure_call)
+            with self.engine.connect() as conn:
+                conn.execute(sqlalchemy.text(self.procedure_call))
+                conn.commit()
                 with self.output().open('w') as mf:
                     mf.write(self.procedure_call)
 
