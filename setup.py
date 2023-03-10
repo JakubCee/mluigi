@@ -84,6 +84,7 @@ setup(
         'luigi.configuration',
         'luigi.contrib',
         'luigi.contrib.hdfs',
+        'luigi.contrib.notifiers',
         'luigi.tools'
     ],
     package_data={
