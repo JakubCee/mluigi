@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv('local_testing.env', override=True)
 
 
-class TestNotifiedTask(luigi.Task, NotifiedTaskMixin):
+class TestNotifiedTask(NotifiedTaskMixin, luigi.Task):
      """Example to send message after successful run of this Task.
      """
      teams_message_text = "My custom message"

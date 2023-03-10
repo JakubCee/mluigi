@@ -50,6 +50,7 @@ class NotifiedTaskMixin():
     teams_buttons: list[tuple[str, str]] = None
 
     def __init__(self, *args, **kwargs):
+        super().__init__()
         event_handler = super().event_handler
 
         @event_handler(luigi.Event.SUCCESS)
