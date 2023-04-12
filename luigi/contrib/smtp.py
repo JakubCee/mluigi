@@ -78,6 +78,8 @@ class SmtpMail(Task):
         if self.username and self.password:
             self.smtp_server.login(self.username, self.password)
 
+        self.smtp_server.connect()
+
     @staticmethod
     def _get_mimetype(attachment):
         """Taken from https://docs.python.org/3/library/email.examples.html"""
