@@ -33,22 +33,40 @@ def list_to_commas(list_of_args):
 class SmtpMail(Task):
     _cfg = smtp_contrib()
 
+
     host = _cfg.host
     port = _cfg.port
     from_ = _cfg.from_
-    html = _cfg.html
-    message = ""
+
     local_hostname = _cfg.local_hostname
     tls = _cfg.tls
     ssl = _cfg.ssl
     username = _cfg.username
     password = _cfg.password
 
-    subject = "[Luigi]"
-    to = None
-    cc = None
-    bcc = None
-    extra_attachments = None
+    @property
+    def message(self):
+        return ""
+
+    @property
+    def subject(self):
+        return "[Luigi]"
+
+    @property
+    def to(self):
+        return None
+
+    @property
+    def cc(self):
+        return None
+
+    @property
+    def bcc(self):
+        return None
+
+    @property
+    def extra_attachments(self):
+        return None
 
     def _connect_to_mailserver(self):
         self.smtp_server = smtplib.SMTP_SSL if self.ssl else smtplib.SMTP
