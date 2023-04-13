@@ -12,7 +12,8 @@ load_dotenv("local_testing.env", override=True)
 
 
 class SqlExcelDump(SqlToExcelTask):
-    connection_string = os.getenv("TEST_CONNECTION_STRING")
+    connection_string = os.getenv("TEST_CONNECTION_STRING").format(server=r"MSTM1BDB33\DB01", database="TESTING_DB",
+                                                                   driver="ODBC+Driver+17+for+SQL+Server")
     sheet_cmd_dict = {"YS": "SELECT * FROM sys.tables",
                        "MYCAL": "CALENDAR"}
     col_max_width = 200
