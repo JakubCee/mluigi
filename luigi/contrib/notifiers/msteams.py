@@ -73,9 +73,11 @@ class NotifiedTaskMixin():
     teams_buttons: list[tuple[str, str]] =  [("Button1", "https://gooogl.com"), ("Button1", "https://sharepoint.com")]
     """
     # set optional text to show on task completion
-    teams_message_text = None
+    teams_message_text = ""
     # button
     teams_buttons: list[tuple[str, str]] = None
+    # webhook_url - keep empty if use webhook from config file
+    webhook_url = ""
 
     def __init__(self, *args, **kwargs):
         super().__init__()
@@ -86,7 +88,7 @@ class NotifiedTaskMixin():
             """Report success event by sending info into MS Teams Channel for successful report generation."""
             config = msteams()
             message = self.teams_message_text or "Task finished with success :)"
-            tm = MsTeamsNotification(webhook_url=config.webhook_url_success,
+            tm = MsTeamsNotification(webhook_url=self.webhook_url or config.webhook_url_success,
                                      title=self.get_task_family(),
                                      message=message,
                                      color="#4BB543")
