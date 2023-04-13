@@ -31,24 +31,38 @@ def list_to_commas(list_of_args):
 
 
 class SmtpMail(Task):
+    """Send email with attachments from input or add extra content.
+    Recipients must be separated by semicolon.
+    Examples:
+        >>> class SendTestMail(SmtpMail):
+        ...     subject = "Test email"
+        ...     message = "<h2>Hello</h2>"
+        ...     html = True
+        ...     to = 'some.email@gmail.com;another.mail@gmail.com'
+        ...     bcc = 'some.email@gmail.com;another.mail@gmail.com'
+        ...     cc = 'some.email@gmail.com;another.mail@gmail.com'
+        ...     from_ = 'no-reply@gmail.com'
+        ...     extra_attachments = ["path/to/file.txt", "path/to/another/file2.txt"]
+
+    """
     _cfg = smtp_contrib()
 
-    host = _cfg.host
-    port = _cfg.port
+    subject: str = "[Luigi]"
+    message: str = ""
+    to: str = ""
+    cc: str = ""
+    bcc: str = ""
     from_ = _cfg.from_
-    html = _cfg.html
-    message = ""
-    local_hostname = _cfg.local_hostname
-    tls = _cfg.tls
-    ssl = _cfg.ssl
-    username = _cfg.username
-    password = _cfg.password
+    extra_attachments: list = None
 
-    subject = "[Luigi]"
-    to = None
-    cc = None
-    bcc = None
-    extra_attachments = None
+    host: str = _cfg.host
+    port: int = _cfg.port
+    local_hostname: str = _cfg.local_hostname
+    html: bool = _cfg.html
+    tls: bool = _cfg.tls
+    ssl: bool = _cfg.ssl
+    username: str = _cfg.username
+    password: str = _cfg.password
 
     def _connect_to_mailserver(self):
         self.smtp_server = smtplib.SMTP_SSL if self.ssl else smtplib.SMTP
@@ -93,7 +107,6 @@ class SmtpMail(Task):
         self.email = EmailMessage()
         self.email["To"] = recipients_dict['to']
         self.email["CC"] = recipients_dict['cc']
-        #self.email["Bcc"] = self.bcc.split(';') if self.bcc else []
         self.email["From"] = self.from_
         self.email["Subject"] = self.subject
         self.email["Date"] = formatdate(localtime=True)
@@ -101,7 +114,7 @@ class SmtpMail(Task):
         self.email.add_alternative(self.message, subtype=content_type)
         return self.email
 
-    def _add_attachment(self, attachment, email):
+    def _add_attachment(self, attachment: str, email):
         """
         Shared function to add attachment to methods `_add_extra_attachments` and `input_attachments`.
         """
@@ -116,20 +129,12 @@ class SmtpMail(Task):
             )
             return email
 
-    def _add_extra_attachments(self, attachments):
+    def _add_extra_attachments(self, attachments: list[str]):
         """
         Attach extra attachment not coming from self.input().
         """
         for attachment in attachments:
             self._add_attachment(attachment=attachment, email=self.email)
-            # attachment = Path(attachment)
-            # maintype, subtype = self._get_mimetype(attachment)
-            # self.email.add_attachment(
-            #     attachment.read_bytes(),
-            #     maintype=maintype,
-            #     subtype=subtype,
-            #     filename=attachment.name,
-            # )
         return self.email
 
     def input_attachments(self):

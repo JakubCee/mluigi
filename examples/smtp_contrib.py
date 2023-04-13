@@ -29,7 +29,7 @@ class ExtraData(luigi.ExternalTask):
 
 class MyFlow(SmtpMail):
     extra_attachments = ["test/_data/file1.txt"]
-    cc = os.getenv("MAIL_TEST_TO")
+    bcc = os.getenv("MAIL_TEST_TO")
     subject = f'TEST EMAIL at {datetime.now().strftime("%H%M%S")}'
 
     def requires(self):
@@ -42,4 +42,5 @@ class MyFlow(SmtpMail):
 
 
 if __name__ == "__main__":
-    luigi.run()
+    t = MyFlow()
+    luigi.build([t], local_scheduler=True)
