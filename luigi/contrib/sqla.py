@@ -144,6 +144,7 @@ import abc
 import collections
 import datetime
 import itertools
+import json
 import logging
 import luigi
 import os
@@ -294,12 +295,12 @@ class CopyToTable(luigi.Task):
     @property
     @abc.abstractmethod
     def connection_string(self):
-        return None
+        return ""
 
     @property
     @abc.abstractmethod
     def table(self):
-        return None
+        return ""
 
     # specify the columns that define the schema. The format for the columns is a list
     # of tuples. For example :
@@ -431,21 +432,31 @@ class CopyToTable(luigi.Task):
 
 
 class SQLAlchemyProcedure(luigi.Task):
+    """Execute SQL Procedure on server. Must specify `connection_string` and `procedure_call` arguments.
+    Argument `out_file` should be `json` file.
+
+    """
     @property
     @abc.abstractmethod
     def connection_string(self):
-        return None
+        return ""
 
     @property
     @abc.abstractmethod
     def procedure_call(self):
         """Valid full command to be executed on SQL."""
-        return None
+        return ""
+
+    @property
+    def out_file(self):
+        return f"SqlProc_{self.ts.strftime('%Y%m%d')}_{self.task_id}.json"
 
     echo = False
     engine_kwargs = {}
     _engine_dict = {}
     Connection = collections.namedtuple("Connection", ["engine", "pid"])
+    keep_output: bool = True
+    ts = datetime.datetime.now()
 
     @property
     def engine(self):
@@ -468,30 +479,38 @@ class SQLAlchemyProcedure(luigi.Task):
 
     def run(self):
         if self.procedure_call:
-            with self.engine.connect() as conn:
+            with self.engine.connect() as conn, conn.begin():
                 conn.execute(sqlalchemy.text(self.procedure_call))
-                conn.commit()
-                with self.output().open('w') as mf:
-                    mf.write(self.procedure_call)
+                with self.output().open('w') as f:
+                    data = {
+                        "exec_time": self.ts.isoformat(),
+                        "conn_string": self.connection_string,
+                        "procedure_call": self.procedure_call,
+                    }
+                    json.dump(data, fp=f, indent=4)
 
     def output(self):
-        fn = "".join([ch for ch in self.procedure_call if ch.isalnum()])
-        return MockTarget(fn)
+        if self.keep_output:
+            return luigi.LocalTarget(self.out_file)
+        else:
+            return MockTarget(self.out_file)
 
 
 class SqlToExcelTask(luigi.Task):
-    out_file: [str, os.PathLike] = f"Export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    @property
+    def out_file(self):
+        return f"Export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
     @property
     @abc.abstractmethod
     def connection_string(self):
-        return None
+        return ""
 
     @property
     @abc.abstractmethod
     def sheet_cmd_dict(self):
         """Dictionary where key is Sheetname in Excel and cmd is valid pandas call to get data from connection."""
-        return None
+        return {}
 
     # additional kwargs for pandas `read_sql` method
     pd_read_sql_kwargs: dict = {}

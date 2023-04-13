@@ -42,5 +42,4 @@ class MyFlow(SmtpMail):
 
 
 if __name__ == "__main__":
-    t = MyFlow()
-    luigi.build([t], local_scheduler=True)
+    luigi.run()
