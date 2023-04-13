@@ -59,6 +59,7 @@ can be set as True. Here is a modified version of the above example:
     from luigi.contrib import sqla
 
     class SQLATask(sqla.CopyToTable):
+
         # If database table is already created, then the schema can be loaded
         # by setting the reflect flag to True
         reflect = True
@@ -146,6 +147,8 @@ import datetime
 import itertools
 import json
 import logging
+import time
+
 import luigi
 import os
 import sqlalchemy
@@ -155,13 +158,14 @@ from luigi.mock import MockTarget
 
 
 class SQLAlchemyTarget(luigi.Target):
-    """
-    Database target using SQLAlchemy.
-
+    """Database target using SQLAlchemy.
+    
     This will rarely have to be directly instantiated by the user.
-
+    
     Typical usage would be to override `luigi.contrib.sqla.CopyToTable` class
     to create a task to write to the database.
+
+
     """
     marker_table = None
     _engine_dict = {}  # dict of sqlalchemy engine instances
@@ -181,7 +185,6 @@ class SQLAlchemyTarget(luigi.Target):
         :type echo: bool
         :param connect_args: A dictionary of connection arguments
         :type connect_args: dict
-        :return:
         """
         if connect_args is None:
             connect_args = {}
@@ -198,10 +201,9 @@ class SQLAlchemyTarget(luigi.Target):
     @property
     def engine(self):
         """
-        Return an engine instance, creating it if it doesn't exist.
-
-        Recreate the engine connection if it wasn't originally created
+        :returns: Recreate the engine connection if it wasn't originally created
         by the current process.
+
         """
         pid = os.getpid()
         conn = SQLAlchemyTarget._engine_dict.get(self.connection_string)
@@ -217,9 +219,7 @@ class SQLAlchemyTarget(luigi.Target):
         return SQLAlchemyTarget._engine_dict[self.connection_string].engine
 
     def touch(self):
-        """
-        Mark this update as complete.
-        """
+        """Mark this update as complete."""
         if self.marker_table_bound is None:
             self.create_marker_table()
 
@@ -249,9 +249,8 @@ class SQLAlchemyTarget(luigi.Target):
         return row is not None
 
     def create_marker_table(self):
-        """
-        Create marker table if it doesn't exist.
-
+        """Create marker table if it doesn't exist.
+        
         Using a separate connection since the transaction might have to be reset.
         """
         if self.marker_table is None:
@@ -277,14 +276,15 @@ class SQLAlchemyTarget(luigi.Target):
 
 
 class CopyToTable(luigi.Task):
-    """
-    An abstract task for inserting a data set into SQLAlchemy RDBMS
-
+    """An abstract task for inserting a data set into SQLAlchemy RDBMS
+    
     Usage:
-
+    
     * subclass and override the required `connection_string`, `table` and `columns` attributes.
     * optionally override the `schema` attribute to use a different schema for
       the target table.
+
+
     """
     _logger = logging.getLogger('luigi-interface')
 
@@ -295,11 +295,13 @@ class CopyToTable(luigi.Task):
     @property
     @abc.abstractmethod
     def connection_string(self):
+        """Conn string for engine"""
         return ""
 
     @property
     @abc.abstractmethod
     def table(self):
+        """Table where rows will be inserted"""
         return ""
 
     # specify the columns that define the schema. The format for the columns is a list
@@ -327,18 +329,24 @@ class CopyToTable(luigi.Task):
     truncate = False  # Set to True if table should be truncated before insert
 
     def create_table(self, engine):
-        """
-        Override to provide code for creating the target table.
-
+        """Override to provide code for creating the target table.
+        
         By default it will be created using types specified in columns.
         If the table exists, then it binds to the existing table.
-
+        
         If overridden, use the provided connection object for setting up the table in order to
         create the table and insert data using the same transaction.
+
         :param engine: The sqlalchemy engine instance
         :type engine: object
+
         """
         def construct_sqla_columns(columns):
+            """
+
+            :param columns: 
+
+            """
             retval = [sqlalchemy.Column(*c[0], **c[1]) for c in columns]
             return retval
 
@@ -368,12 +376,11 @@ class CopyToTable(luigi.Task):
                     self._logger.exception(self.table + str(e))
 
     def update_id(self):
-        """
-        This update id will be a unique identifier for this insert on this table.
-        """
+        """This update id will be a unique identifier for this insert on this table."""
         return self.task_id
 
     def output(self):
+        """ """
         return SQLAlchemyTarget(
             connection_string=self.connection_string,
             target_table=self.table,
@@ -385,15 +392,17 @@ class CopyToTable(luigi.Task):
 
     def rows(self):
         """
-        Return/yield tuples or lists corresponding to each row to be inserted.
 
-        This method can be overridden for custom file types or formats.
+
+        :returns: This method can be overridden for custom file types or formats.
+
         """
         with self.input().open('r') as fobj:
             for line in fobj:
                 yield line.strip("\n").split(self.column_separator)
 
     def run(self):
+        """ """
         self._logger.info("Running task copy to table for update id %s for table %s" % (self.update_id(), self.table))
         output = self.output()
         engine = output.engine
@@ -416,15 +425,15 @@ class CopyToTable(luigi.Task):
         self._logger.info("Finished inserting rows into SQLAlchemy target")
 
     def copy(self, conn, ins_rows, table_bound):
-        """
-        This method does the actual insertion of the rows of data given by ins_rows into the
+        """This method does the actual insertion of the rows of data given by ins_rows into the
         database. A task that needs row updates instead of insertions should overload this method.
+
         :param conn: The sqlalchemy connection object
         :param ins_rows: The dictionary of rows with the keys in the format _<column_name>. For example
         if you have a table with a column name "property", then the key in the dictionary
         would be "_property". This format is consistent with the bindparam usage in sqlalchemy.
         :param table_bound: The object referring to the table
-        :return:
+
         """
         bound_cols = dict((c, sqlalchemy.bindparam("_" + c.key)) for c in table_bound.columns)
         ins = table_bound.insert().values(bound_cols)
@@ -435,10 +444,19 @@ class SQLAlchemyProcedure(luigi.Task):
     """Execute SQL Procedure on server. Must specify `connection_string` and `procedure_call` arguments.
     Argument `out_file` should be `json` file.
 
+    Attrs:
+    procedure_call: str = "EXEC SPC_SOME_PROCEDURE @value = 'some value to insert'"
+    connection_string: str = conn
+
+    Other attrs:
+    echo = False
+    engine_kwargs = {}
+    keep_output: bool = True  # LocalTarget as json or MockTarget
     """
     @property
     @abc.abstractmethod
     def connection_string(self):
+        """ """
         return ""
 
     @property
@@ -449,6 +467,9 @@ class SQLAlchemyProcedure(luigi.Task):
 
     @property
     def out_file(self):
+        """Overwrite with path to output.
+        Defaults to SqlProc_[YMD]_[TASK_ID].json
+        """
         return f"SqlProc_{self.ts.strftime('%Y%m%d')}_{self.task_id}.json"
 
     echo = False
@@ -461,9 +482,11 @@ class SQLAlchemyProcedure(luigi.Task):
     @property
     def engine(self):
         """
-        Return an engine instance, creating it if it doesn't exist.
-        Recreate the engine connection if it wasn't originally created
+
+
+        :returns: Recreate the engine connection if it wasn't originally created
         by the current process.
+
         """
         pid = os.getpid()
         conn = self._engine_dict.get(self.connection_string)
@@ -478,18 +501,23 @@ class SQLAlchemyProcedure(luigi.Task):
         return SQLAlchemyProcedure._engine_dict[self.connection_string].engine
 
     def run(self):
+        """Execute procedure and output json with summary data."""
         if self.procedure_call:
             with self.engine.connect() as conn, conn.begin():
+                start = time.perf_counter()
                 conn.execute(sqlalchemy.text(self.procedure_call))
+                exec_time = time.perf_counter() - start
                 with self.output().open('w') as f:
                     data = {
                         "exec_time": self.ts.isoformat(),
                         "conn_string": self.connection_string,
                         "procedure_call": self.procedure_call,
+                        "execution_time_sec": round(exec_time, 4)
                     }
                     json.dump(data, fp=f, indent=4)
 
     def output(self):
+        """Return json file or MockTarget if param ``keep_output`` is set to False"""
         if self.keep_output:
             return luigi.LocalTarget(self.out_file)
         else:
@@ -497,13 +525,32 @@ class SQLAlchemyProcedure(luigi.Task):
 
 
 class SqlToExcelTask(luigi.Task):
+    """Export data from server into Excel.
+
+    Attrs:
+    sheet_cmd_dict: dict[str, str] = {"Sheetname": "SELECT * FROM TABLE"}
+    out_file: str = Filename for output, defaults to Export_[YMD_HMS].xlsx
+    connection_string
+
+    Other attrs:
+
+    pd_read_sql_kwargs: dict = {}  # additional kwargs for pandas `read_sql` method
+    pd_writer_kwargs: dict = {}  # additional kwargs for pandas Excel Writer object
+    pd_to_excel_kwargs: dict = {}  # additional kwargs for pandas `to_excel` method
+    col_max_width: int = None  # Specify max width for columns in output
+    """
+
     @property
     def out_file(self):
+        """Location where data will be dumped"""
         return f"Export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
     @property
     @abc.abstractmethod
     def connection_string(self):
+        """Connection string like
+        `mssql+pyodbc://?odbc_connect=DRIVER={ODBC+Driver+17+for+SQL+Server};SERVER=MSTM1BDB33\DB01;DATABASE={db}};Trusted_Connection=yes`
+        """
         return ""
 
     @property
@@ -539,6 +586,9 @@ class SqlToExcelTask(luigi.Task):
         return self._dataframes
 
     def run(self):
+        """Load data, import each rowset into sheet
+
+        """
         if not self.connection_string:
             raise AttributeError("Connection string is empty")
         dataframes_dict = self._get_data()
