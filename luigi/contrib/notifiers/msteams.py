@@ -17,6 +17,14 @@ except ImportError:
 
 class MsTeamsNotification:
     def __init__(self, webhook_url: str, title: str, message: str, color: str = None):
+        """MsTeams notification for sending message via webhook. Supports title, body, cards and buttons.
+
+        :param webhook_url: URL to MSTeams webhook
+        :param title: Subjec of notification
+        :param message: Main body od the notification
+        :param color: HEX color to format message
+
+        """
         self.webhook_url = webhook_url
         self.title = title
         self.message = message
@@ -28,22 +36,42 @@ class MsTeamsNotification:
             self.teams_msg.color(color)
 
     def add_button(self, button_name, button_url):
-        """Add button to the message"""
+        """Add button to the message
+
+        :param button_name: 
+        :param button_url: 
+
+        """
         if re.match("https?://", button_url):
             self.teams_msg.addLinkButton(button_name, button_url)
         else:
             logger.warning("Button url must start with `https://`")
 
     def add_section_keys(self, key, value):
+        """Add key-value pairs into card section.
+
+        :param key: Eg. "Executed by"
+        :param value: Eg. "PC8473"
+
+        """
         self.section.addFact(factname=key, factvalue=value)
 
     def send(self):
+        """Send a message to webhook."""
         self.section.disableMarkdown()
         self.teams_msg.addSection(self.section)
         self.teams_msg.send()
 
 
 class NotifiedTaskMixin():
+    """Mix with other task (mixin first) to get notification on successful completion of mixed task.
+
+    Configuration in `luigi.config` section [msteams], specify keys `webhook_url_success` and `webhook_url_failure`
+
+    Attrs:
+    teams_message_text: str = "Custom text to show in notification"
+    teams_buttons: list[tuple[str, str]] =  [("Button1", "https://gooogl.com"), ("Button1", "https://sharepoint.com")]
+    """
     # set optional text to show on task completion
     teams_message_text = None
     # button
@@ -55,9 +83,7 @@ class NotifiedTaskMixin():
 
         @event_handler(luigi.Event.SUCCESS)
         def celebrate_success(self):
-            """
-            Report success event by sending info into MS Teams Channel for successful report generation.
-            """
+            """Report success event by sending info into MS Teams Channel for successful report generation."""
             config = msteams()
             message = self.teams_message_text or "Task finished with success :)"
             tm = MsTeamsNotification(webhook_url=config.webhook_url_success,
